@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tech Stack</title>
+<style>
+  :root {
+    --bg: #02030d;
+    --cyan: #2fc8ff;
+    --ink: #e6f6ff;
+    --muted: #8aa4c4;
+    --tool: clamp(32px, 4.1vw, 60px);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  .stack { position: relative; padding: 72px 16px 0; overflow: hidden; }
+  .stack header { position: relative; z-index: 2; text-align: center; max-width: 720px; margin: 0 auto; }
+  .stack h2 {
+    margin: 0 0 10px; font-size: clamp(28px, 4.5vw, 48px); font-weight: 800; letter-spacing: -.02em;
+    background: linear-gradient(90deg, #ffffff, #8fe6ff 55%, var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stack p { margin: 0; color: var(--muted); font-size: clamp(14px, 1.6vw, 17px); }
+
+  .stage { position: relative; height: clamp(520px, 82vh, 860px); margin: 0 -16px; }
+  .stage canvas { position: absolute; inset: 0; display: block; }
+  .tools { position: absolute; inset: 0; pointer-events: none; }
+
+  .tool {
+    position: absolute; left: 0; top: 0;
+    width: var(--tool); height: var(--tool); padding: 0;
+    display: grid; place-items: center;
+    border-radius: 30%;
+    border: 1px solid rgba(90, 200, 255, .35);
+    background: radial-gradient(circle at 30% 22%, rgba(130, 225, 255, .2), rgba(6, 18, 44, .88) 70%);
+    box-shadow: 0 0 18px rgba(47, 200, 255, .16), inset 0 0 12px rgba(47, 200, 255, .12);
+    backdrop-filter: blur(4px);
+    cursor: pointer; pointer-events: auto; will-change: transform, opacity;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .tool img { width: 58%; height: 58%; object-fit: contain; pointer-events: none; user-select: none; }
+  .tool .fallback { font: 700 13px/1 system-ui, sans-serif; color: var(--cyan); }
+  .tool .label {
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(-4px);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink);
+    background: rgba(6, 20, 48, .92); border: 1px solid rgba(90, 200, 255, .45);
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  .tool:hover, .tool:focus-visible, .tool.is-hover {
+    outline: none; border-color: #8fe9ff;
+    box-shadow: 0 0 30px rgba(47, 200, 255, .55), inset 0 0 16px rgba(47, 200, 255, .3);
+  }
+  .tool:hover .label, .tool:focus-visible .label, .tool.is-hover .label { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<section class="stack" aria-labelledby="stack-title">
+  <header>
+    <h2 id="stack-title">Tech Stack</h2>
+    <p>The technologies and tools I use to build exceptional digital experiences</p>
+  </header>
+  <div class="stage" id="stage">
+    <div class="tools" id="tools"></div>
+  </div>
+</section>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createCrystal, sparkField, C } from './crystal.js';
+
+// ---------- your tools: edit freely ----------
+// ring: 0 = inner, 1 = middle, 2 = outer. Any image URL works for `icon`.
+const devicon = (n) => `https://cdn.jsdelivr.net/npm/devicon@2.16.0/icons/${n}/${n}-original.svg`;
+const simple = (slug, color = '') => `https://cdn.simpleicons.org/${slug}${color ? '/' + color : ''}`;
+const TOOLS = [
+  { name: 'VS Code',        ring: 0, icon: devicon('vscode') },
+  { name: 'GitHub',         ring: 0, icon: devicon('github'), mono: true },
+  { name: 'Supabase',       ring: 0, icon: devicon('supabase') },
+  { name: 'Firebase',       ring: 0, icon: devicon('firebase') },
+  { name: 'Vercel',         ring: 0, icon: devicon('vercel'), mono: true },
+
+  { name: 'Android Studio', ring: 1, icon: devicon('androidstudio') },
+  { name: 'GitLab',         ring: 1, icon: devicon('gitlab') },
+  { name: 'Unity',          ring: 1, icon: devicon('unity'), mono: true },
+  { name: 'Canva',          ring: 1, icon: devicon('canva') },
+  { name: 'n8n',            ring: 1, icon: simple('n8n') },
+  { name: 'XAMPP',          ring: 1, icon: simple('xampp') },
+  { name: 'NetBeans',       ring: 1, icon: simple('apachenetbeanside') },
+
+  { name: 'Gemini',         ring: 2, icon: simple('googlegemini') },
+  { name: 'Anthropic',      ring: 2, icon: simple('anthropic', 'white') },
+  { name: 'DeepSeek',       ring: 2, icon: simple('deepseek') },
+  { name: 'Windsurf',       ring: 2, icon: simple('windsurf', 'white') },
+  { name: 'MATLAB',         ring: 2, icon: devicon('matlab') },
+  { name: 'Claude',         ring: 2, icon: simple('claude') },
+];
+
+const BASE_RADII = [4.3, 6.4, 8.6];  // world units; the crystal cube is 3 wide
+const RING_SPEED = [0.16, 0.11, 0.075]; // rad/s, inner rings move faster
+// how far above the orbit plane we look from (higher on portrait screens to use the height)
+const ELEV_WIDE = THREE.MathUtils.degToRad(27), ELEV_TALL = THREE.MathUtils.degToRad(44);
+let ELEV = ELEV_WIDE;
+
+// ---------- renderer / scene ----------
+const stage = document.getElementById('stage');
+const toolsLayer = document.getElementById('tools');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.NeutralToneMapping;
+stage.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = (() => {
+  const c = document.createElement('canvas');
+  c.width = 2; c.height = 512;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, '#02030d');
+  g.addColorStop(0.6, '#040822');
+  g.addColorStop(1, '#0b1a44');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 2, 512);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+})();
+
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 300);
+
+// ---------- crystal ----------
+// tilt it toward the raised camera so the turntable still rests on the logo pose
+const crystal = createCrystal({ pixelRatio: renderer.getPixelRatio() });
+const tilt = new THREE.Group();
+tilt.add(crystal.object);
+scene.add(tilt);
+
+const stars = sparkField(900, 35, 90, 240, 0.28, renderer.getPixelRatio());
+scene.add(stars);
+
+// ---------- orbit rings ----------
+const circle = new THREE.BufferGeometry().setFromPoints(
+  Array.from({ length: 256 }, (_, i) => {
+    const a = (i / 256) * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  })
+);
+const ringMat = new THREE.LineBasicMaterial({
+  color: C.cyan, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const rings = BASE_RADII.map(() => {
+  const l = new THREE.LineLoop(circle, ringMat);
+  scene.add(l);
+  return l;
+});
+let radii = BASE_RADII.slice();
+
+// ---------- tool icons (HTML, positioned from 3D every frame) ----------
+const perRing = [0, 1, 2].map((r) => TOOLS.filter((t) => t.ring === r).length);
+const seenPerRing = [0, 0, 0];
+const items = TOOLS.map((tool) => {
+  const k = seenPerRing[tool.ring]++;
+  const el = document.createElement('button');
+  el.className = 'tool';
+  el.type = 'button';
+  el.setAttribute('aria-label', tool.name);
+  const img = new Image();
+  img.src = tool.icon;
+  img.alt = '';
+  img.decoding = 'async';
+  if (tool.mono) img.style.filter = 'invert(1)';
+  img.onerror = () => {
+    const f = document.createElement('span');
+    f.className = 'fallback';
+    f.textContent = tool.name.slice(0, 2);
+    img.replaceWith(f);
+  };
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = tool.name;
+  el.append(img, label);
+  toolsLayer.append(el);
+
+  const item = {
+    el,
+    ring: tool.ring,
+    phase: (k / perRing[tool.ring]) * Math.PI * 2 + tool.ring * 0.7,
+    pos: new THREE.Vector3(),
+    hover: false,
+  };
+  const on = () => { item.hover = true; el.classList.add('is-hover'); };
+  const off = () => { item.hover = false; el.classList.remove('is-hover'); };
+  el.addEventListener('pointerenter', on);
+  el.addEventListener('pointerleave', off);
+  el.addEventListener('focus', on);
+  el.addEventListener('blur', off);
+  return item;
+});
+
+// beams from each tool into the crystal
+const linkPos = new Float32Array(items.length * 6);
+const linkCol = new Float32Array(items.length * 6);
+const linkGeo = new THREE.BufferGeometry();
+linkGeo.setAttribute('position', new THREE.BufferAttribute(linkPos, 3).setUsage(THREE.DynamicDrawUsage));
+linkGeo.setAttribute('color', new THREE.BufferAttribute(linkCol, 3).setUsage(THREE.DynamicDrawUsage));
+scene.add(new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({
+  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+})));
+
+// ---------- post-processing ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.6, 0.4, 0.5));
+composer.addPass(new OutputPass());
+
+// ---------- layout ----------
+const D = 18.5;
+let W = 1, H = 1, k = 1, crystalPx = 100;
+function fit() {
+  W = Math.max(stage.clientWidth, 1);
+  H = Math.max(stage.clientHeight, 1);
+  const aspect = W / H;
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  // scale the whole system (crystal + rings) so the outer ring fits the width
+  k = THREE.MathUtils.clamp((t * aspect * D - 0.7) / BASE_RADII[2], 0.3, 1);
+  ELEV = aspect < 1 ? ELEV_TALL : ELEV_WIDE;
+  tilt.rotation.x = -ELEV; // keeps the crystal's logo pose facing the camera
+  tilt.scale.setScalar(k);
+  radii = BASE_RADII.map((r) => r * k);
+  rings.forEach((ring, i) => ring.scale.setScalar(radii[i]));
+  crystalPx = ((2.3 * k) / (2 * t * D)) * H;
+  renderer.setSize(W, H);
+  composer.setSize(W, H);
+}
+new ResizeObserver(fit).observe(stage);
+fit();
+
+// subtle parallax from the pointer
+const pointer = new THREE.Vector2();
+const look = new THREE.Vector2();
+addEventListener('pointermove', (e) => {
+  pointer.set(e.clientX / innerWidth - 0.5, e.clientY / innerHeight - 0.5);
+});
+
+// only animate while the section is on screen
+let onScreen = true;
+new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; }).observe(stage);
+
+// ---------- animate ----------
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const speed = reduceMotion ? 0.25 : 1;
+const clock = new THREE.Clock();
+const center = new THREE.Vector3();
+const v = new THREE.Vector3();
+const cyan = C.cyan;
+let orbitT = 0, orbitSpeed = 1;
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.25) * speed;
+  if (!onScreen) return;
+
+  const t = crystal.update(dt);
+  stars.rotation.y += dt * 0.004;
+
+  // hovering any tool eases the orbits to a stop
+  const hovering = items.some((i) => i.hover);
+  orbitSpeed += ((hovering ? 0 : 1) - orbitSpeed) * Math.min(1, dt * 4);
+  orbitT += dt * orbitSpeed;
+
+  look.lerp(pointer, Math.min(1, dt * 3));
+  camera.position.set(look.x * 1.6, D * Math.sin(ELEV) - look.y * 1.0, D * Math.cos(ELEV));
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+
+  const camDist = camera.position.length();
+  const span = radii[2];
+  center.set(0, 0, 0).project(camera);
+  const cx = (center.x * 0.5 + 0.5) * W, cy = (-center.y * 0.5 + 0.5) * H;
+
+  items.forEach((it, i) => {
+    const a = it.phase + orbitT * RING_SPEED[it.ring];
+    const r = radii[it.ring];
+    it.pos.set(Math.cos(a) * r, Math.sin(t * 0.9 + it.phase * 3) * 0.12 * k, Math.sin(a) * r);
+
+    v.copy(it.pos).project(camera);
+    const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+
+    // depth: +1 nearest the viewer, -1 furthest behind the crystal
+    const depth = THREE.MathUtils.clamp((camDist - it.pos.distanceTo(camera.position)) / span, -1, 1);
+    const f = (depth + 1) / 2;
+    let opacity = 0.35 + 0.65 * f;
+    if (depth < 0 && Math.hypot(x - cx, y - cy) < crystalPx) opacity *= 0.25; // hidden behind the crystal
+    if (it.hover) opacity = 1;
+    const scale = (0.7 + 0.38 * f) * (it.hover ? 1.18 : 1);
+
+    it.el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+    it.el.style.opacity = opacity.toFixed(3);
+    it.el.style.zIndex = it.hover ? 2000 : Math.round(1000 + depth * 500);
+
+    // beam: bright at the tool, fading into the crystal
+    it.pos.toArray(linkPos, i * 6);
+    v.copy(it.pos).setLength(2.2 * k).toArray(linkPos, i * 6 + 3);
+    const near = (it.hover ? 0.9 : 0.22) * opacity, far = it.hover ? 0.35 : 0.03;
+    linkCol.set([cyan.r * near, cyan.g * near, cyan.b * near, cyan.r * far, cyan.g * far, cyan.b * far], i * 6);
+  });
+  linkGeo.attributes.position.needsUpdate = true;
+  linkGeo.attributes.color.needsUpdate = true;
+
+  composer.render();
+});
+</script>
+</body>
+</html>

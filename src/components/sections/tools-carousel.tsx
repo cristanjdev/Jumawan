@@ -5,24 +5,13 @@ import { motion, useScroll, useTransform, useSpring, MotionValue, useMotionValue
 import { useQuery } from "convex/react";
 import { api } from '../../../convex/_generated/api';
 import { useMotionBudget } from "@/stores/usePerformanceStore";
+import { usePageVisible } from "@/hooks/use-page-visible";
+import { ToolsOrbit3D } from "./tools-orbit-3d";
 
 // --- Types ---
 interface DisplayTool {
   name: string;
   image: string;
-}
-
-// --- Pauses looping work while the tab is in the background ---
-function usePageVisible() {
-  const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
-
-  useEffect(() => {
-    const onChange = () => setVisible(!document.hidden);
-    document.addEventListener('visibilitychange', onChange);
-    return () => document.removeEventListener('visibilitychange', onChange);
-  }, []);
-
-  return visible;
 }
 
 // --- Shared scroll velocity tracker for mobile marquee ---
@@ -614,11 +603,17 @@ export function ToolsCarousel() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Desktop gets the 3D orbit unless the device is on the low performance tier or WebGL fails
+  const { tier, reduceMotion } = useMotionBudget();
+  const [webglFailed, setWebglFailed] = useState(false);
+  const use3D = !isMobile && tier !== "low" && !webglFailed;
+  const rings = useMemo(() => [innerRing, middleRing, outerRing], [innerRing, middleRing, outerRing]);
+
   return (
     <section
       ref={containerRef}
       id="tools"
-      className="py-20 sm:py-24 relative overflow-hidden bg-transparent min-h-[600px] md:min-h-[1000px] flex flex-col items-center justify-center"
+      className={`py-20 sm:py-24 relative overflow-hidden bg-transparent flex flex-col items-center justify-center ${use3D ? "" : "min-h-[600px] md:min-h-[1000px]"}`}
     >
       <motion.div 
         className="container mx-auto px-4 relative z-10 flex flex-col items-center"
@@ -628,7 +623,7 @@ export function ToolsCarousel() {
         transition={{ duration: 0.9 }}
       >
         <motion.div 
-          className="text-center mb-28 sm:mb-36"
+          className={`text-center ${use3D ? "mb-4" : "mb-28 sm:mb-36"}`}
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -646,7 +641,7 @@ export function ToolsCarousel() {
 
         <motion.div 
           key={isMobile ? "mobile" : "desktop"}
-          className={isMobile ? "w-full" : undefined}
+          className={isMobile || use3D ? "w-full" : undefined}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
@@ -658,6 +653,14 @@ export function ToolsCarousel() {
               innerRing={innerRing}
               middleRing={middleRing}
               outerRing={outerRing}
+            />
+          ) : use3D ? (
+            <ToolsOrbit3D
+              rings={rings}
+              quality={tier === "high" ? "high" : "medium"}
+              reduceMotion={reduceMotion}
+              sectionRef={containerRef}
+              onUnavailable={() => setWebglFailed(true)}
             />
           ) : (
             <DesktopSolarSystem
