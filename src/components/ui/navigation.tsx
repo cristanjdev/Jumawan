@@ -6,6 +6,7 @@ import { Menu, X, Github, Linkedin, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 import { useThemeStore } from "@/stores/useThemeStore";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 const navigationItems = [
   { name: "Home", href: "#home" },
@@ -118,14 +119,7 @@ export function Navigation() {
             transition={{ duration: 0.3 }}
             className="select-none group"
           >
-            <img
-              src="/cjj logo.png"
-              alt="@cjj logo"
-              className="block h-10 sm:h-12 md:h-16 w-auto object-contain drop-shadow-[0_0_12px_rgba(59,130,246,0.65)] transition duration-300 group-hover:drop-shadow-[0_0_18px_rgba(59,130,246,0.9)] group-hover:brightness-110"
-              draggable={false}
-              loading="lazy"
-              decoding="async"
-            />
+            <BrandLogo className="block h-9 sm:h-10 md:h-11 object-contain transition duration-300 dark:drop-shadow-[0_0_10px_rgba(56,189,248,0.45)] dark:group-hover:drop-shadow-[0_0_16px_rgba(56,189,248,0.75)] group-hover:brightness-110" />
           </motion.div>
 
           {/* Desktop Navigation */}
@@ -161,7 +155,7 @@ export function Navigation() {
             {/* Social Icons */}
             <div className="flex items-center space-x-4 ml-2 border-l border-border/20 pl-6">
               <a
-                href="https://github.com/"
+                href="https://github.com/cristanjdev"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub"
@@ -252,7 +246,7 @@ export function Navigation() {
 
                 {/* Social Icons */}
                 <motion.a
-                  href="https://github.com/"
+                  href="https://github.com/cristanjdev"
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="GitHub"

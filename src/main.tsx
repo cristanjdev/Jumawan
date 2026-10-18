@@ -1,6 +1,10 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { initPerformanceTier } from './stores/usePerformanceStore'
+
+// Pick the effects tier before first render so components mount with it
+initPerformanceTier();
 
 // Suppress specific console warnings in development
 if (import.meta.env.DEV) {

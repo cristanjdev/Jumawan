@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { Download, ExternalLink, FileText, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useHeroSettingsStore } from "@/stores/useHeroSettingsStore";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
-import { jsPDF } from "jspdf";
+import { useMotionBudget } from "@/stores/usePerformanceStore";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import {
   buildResumeStorageFetchUrls,
@@ -16,12 +16,88 @@ import {
   fetchFirstOk,
 } from "@/lib/convexSite";
 
-export function HeroSection() {
-  const shouldReduceMotion = useReducedMotion();
-  const [displayedName, setDisplayedName] = useState("");
-  const fullName = "Cristan Jade Jumawan";
+const FULL_NAME = "Cristan Jade Jumawan";
+
+const DYNAMIC_PHRASES = [
+  "Crafting exceptional digital experiences that drive business growth and user engagement.",
+  "Building scalable, high-performance applications with clean architecture and modern practices.",
+  "Transforming complex ideas into elegant, intuitive solutions that users love.",
+  "Delivering end-to-end digital products from concept to deployment with precision.",
+  "Passionate about creating seamless experiences across web and mobile platforms.",
+];
+
+// Typing animation lives in its own component so each keystroke re-renders
+// only this heading text, not the whole hero.
+function TypingName({ animate }: { animate: boolean }) {
+  const [count, setCount] = useState(animate ? 0 : FULL_NAME.length);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (!animate) {
+      setCount(FULL_NAME.length);
+      return;
+    }
+    const atEnd = !isDeleting && count === FULL_NAME.length;
+    const atStart = isDeleting && count === 0;
+    const delay = atEnd ? 1200 : isDeleting ? 80 : 120;
+
+    const timeout = window.setTimeout(() => {
+      if (atEnd) setIsDeleting(true);
+      else if (atStart) setIsDeleting(false);
+      else setCount((c) => c + (isDeleting ? -1 : 1));
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [animate, count, isDeleting]);
+
+  return (
+    <>
+      {/* Screen readers and crawlers always get the full, stable name */}
+      <span className="sr-only">{FULL_NAME}</span>
+      <span aria-hidden="true" className="bg-gradient-to-r from-[hsl(197,100%,85%)] via-[hsl(202,85%,70%)] to-[hsl(197,100%,60%)] bg-clip-text text-transparent">
+        {FULL_NAME.slice(0, count)}
+      </span>
+      <motion.span
+        key={`cursor-${animate}`}
+        aria-hidden="true"
+        animate={animate ? { opacity: [1, 0, 1] } : undefined}
+        transition={{ duration: 1, repeat: Infinity }}
+        className="text-primary ml-0.5"
+      >
+        |
+      </motion.span>
+    </>
+  );
+}
+
+// Rotating tagline, isolated for the same reason as TypingName
+function RotatingPhrase() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % DYNAMIC_PHRASES.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.p
+        key={index}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.5, ease: "easeInOut" }}
+      >
+        {DYNAMIC_PHRASES[index]}
+      </motion.p>
+    </AnimatePresence>
+  );
+}
+
+export function HeroSection() {
+  // parallax: scroll-linked transforms · ambient: cheap looping decor · rich: paint-heavy loops
+  const { tier, parallax, ambient, rich } = useMotionBudget();
   const [isDownloading, setIsDownloading] = useState(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
@@ -33,7 +109,6 @@ export function HeroSection() {
   const [resumeDragStart, setResumeDragStart] = useState({ x: 0, y: 0 });
   const [resumeDragging, setResumeDragging] = useState(false);
   const resumeContainerRef = useRef<HTMLDivElement>(null);
-  const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
   const [animationsReady, setAnimationsReady] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -55,13 +130,6 @@ export function HeroSection() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const dynamicPhrases = [
-    "Crafting exceptional digital experiences that drive business growth and user engagement.",
-    "Building scalable, high-performance applications with clean architecture and modern practices.",
-    "Transforming complex ideas into elegant, intuitive solutions that users love.",
-    "Delivering end-to-end digital products from concept to deployment with precision.",
-    "Passionate about creating seamless experiences across web and mobile platforms.",
-  ];
   const { toast } = useToast();
   const { scrollToSection } = useSmoothScroll();
 
@@ -81,53 +149,6 @@ export function HeroSection() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8, 1], [1, 0.3, 0]);
   const nameX = useTransform(scrollYProgress, [0, 0.5], isMobile ? ["0%", "0%"] : ["0%", "-3%"]);
   const fadeGradientOpacity = useTransform(scrollYProgress, [0, 0.3, 0.7], [0, 0.8, 1]);
-
-  useEffect(() => {
-    let frameId: number | null = null;
-    let lastTime = 0;
-    const typingIntervalMs = isDeleting ? 80 : 120;
-    let pauseTimeout: number | null = null;
-
-    const tick = (time: number) => {
-      if (lastTime === 0) lastTime = time;
-      const elapsed = time - lastTime;
-      if (elapsed >= typingIntervalMs) {
-        lastTime = time;
-        if (!isDeleting) {
-          if (currentIndex < fullName.length) {
-            setDisplayedName(fullName.slice(0, currentIndex + 1));
-            setCurrentIndex(currentIndex + 1);
-          } else {
-            if (!pauseTimeout) {
-              pauseTimeout = window.setTimeout(() => setIsDeleting(true), 1200);
-            }
-          }
-        } else {
-          if (currentIndex > 0) {
-            setDisplayedName(fullName.slice(0, currentIndex - 1));
-            setCurrentIndex(currentIndex - 1);
-          } else {
-            setIsDeleting(false);
-          }
-        }
-      }
-      frameId = requestAnimationFrame(tick);
-    };
-
-    frameId = requestAnimationFrame(tick);
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId);
-      if (pauseTimeout) window.clearTimeout(pauseTimeout);
-    };
-  }, [currentIndex, isDeleting, fullName]);
-
-  // Rotate dynamic phrases
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentPhraseIndex((prev) => (prev + 1) % dynamicPhrases.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [dynamicPhrases.length]);
 
   // Fetch hero settings on mount
   useEffect(() => {
@@ -226,6 +247,9 @@ export function HeroSection() {
     scheduleAnimations();
   }, [isMobile]);
 
+  // Low tier keeps the avatar's static borders but skips the extra rings, dots and pulses
+  const showDecor = animationsReady && tier !== "low";
+
   const scrollToProjects = () => {
     scrollToSection("projects");
   };
@@ -302,6 +326,8 @@ export function HeroSection() {
         const pdfW = 210; // A4 mm
         const pdfH = Math.round((imgH / imgW) * pdfW);
 
+        // Loaded on demand — keeps ~340 KB out of the initial bundle
+        const { jsPDF } = await import("jspdf");
         const pdf = new jsPDF({
           orientation: pdfW >= pdfH ? 'landscape' : 'portrait',
           unit: 'mm',
@@ -381,7 +407,7 @@ export function HeroSection() {
       {/* Background with Mesh Gradient */}
       <motion.div
         className="absolute inset-0 bg-[var(--surface-bg)]"
-        style={{ y: backgroundY, willChange: 'transform' }}
+        style={parallax ? { y: backgroundY, willChange: 'transform' } : undefined}
       >
         <div className="absolute inset-0 bg-gradient-hero opacity-20" />
         <div
@@ -414,13 +440,15 @@ export function HeroSection() {
       </motion.div>
 
       {/* Floating Background Elements with Parallax */}
-      {animationsReady && (
+      {showDecor && (
       <motion.div
         className="absolute inset-0 overflow-hidden pointer-events-none"
-        style={{ y: floatingElementsY, willChange: 'transform' }}
+        style={parallax ? { y: floatingElementsY, willChange: 'transform' } : undefined}
       >
+        {/* Keyed so a runtime tier downgrade remounts it static (framer keeps looping otherwise) */}
         <motion.div
-          animate={shouldReduceMotion ? undefined : {
+          key={`blob-${rich}`}
+          animate={!rich ? undefined : {
             x: [0, -80, 0],
             y: [0, 60, 0],
           }}
@@ -449,21 +477,12 @@ export function HeroSection() {
               initial="hidden"
               animate="visible"
               className="text-center lg:text-left order-2 lg:order-1"
-              style={{ y: contentY, willChange: 'transform' }}
+              style={parallax ? { y: contentY, willChange: 'transform' } : undefined}
             >
               {/* Typing Name */}
-              <motion.div variants={fadeUp} style={{ x: nameX }}>
+              <motion.div variants={fadeUp} style={parallax ? { x: nameX } : undefined}>
                 <h1 className="text-[clamp(1.5rem,5vw,3.75rem)] font-extrabold leading-[1.08] tracking-tight whitespace-nowrap">
-                  <span className="bg-gradient-to-r from-[hsl(197,100%,85%)] via-[hsl(202,85%,70%)] to-[hsl(197,100%,60%)] bg-clip-text text-transparent">
-                    {displayedName}
-                  </span>
-                  <motion.span
-                    animate={{ opacity: [1, 0, 1] }}
-                    transition={{ duration: 1, repeat: Infinity }}
-                    className="text-primary ml-0.5"
-                  >
-                    |
-                  </motion.span>
+                  <TypingName animate={ambient} />
                 </h1>
               </motion.div>
 
@@ -484,17 +503,7 @@ export function HeroSection() {
                 variants={fadeUp}
                 className="text-[15px] sm:text-base text-muted-foreground/70 mb-9 sm:mb-10 leading-[1.7] max-w-lg mx-auto lg:mx-0 min-h-[5.1em] sm:min-h-[3.4em]"
               >
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={currentPhraseIndex}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.5, ease: "easeInOut" }}
-                  >
-                    {dynamicPhrases[currentPhraseIndex]}
-                  </motion.p>
-                </AnimatePresence>
+                <RotatingPhrase />
               </motion.div>
 
               {/* CTA Buttons - Inline on mobile, styled on desktop */}
@@ -542,18 +551,19 @@ export function HeroSection() {
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.4, duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
-              style={{ scale: avatarScale, y: avatarY, willChange: 'transform' }}
+              style={parallax ? { scale: avatarScale, y: avatarY, willChange: 'transform' } : undefined}
               className="relative flex justify-center lg:justify-end order-1 lg:order-2"
             >
               {/* Float animation wraps everything */}
               <motion.div
-                animate={shouldReduceMotion || !animationsReady ? undefined : { y: [0, -12, 0] }}
+                animate={!ambient || !animationsReady ? undefined : { y: [0, -12, 0] }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 className="relative w-[250px] h-[250px] sm:w-[288px] sm:h-[288px] md:w-[336px] md:h-[336px] lg:w-[384px] lg:h-[384px]"
               >
-                {/* Ambient glow - breathing */}
+                {/* Ambient glow - breathing (static below the high tier: animating a blurred, blended layer repaints every frame) */}
                 <motion.div
-                  animate={shouldReduceMotion || !animationsReady ? undefined : {
+                  key={`glow-${rich}`}
+                  animate={!rich || !animationsReady ? undefined : {
                     opacity: [0.6, 0.8, 0.6],
                     scale: [1.1, 1.25, 1.1],
                   }}
@@ -563,13 +573,13 @@ export function HeroSection() {
                     background: 'radial-gradient(circle, var(--avatar-glow-1), var(--avatar-glow-2), var(--avatar-glow-3), transparent 70%)',
                     filter: 'blur(60px)',
                     mixBlendMode: 'screen',
-                    willChange: animationsReady ? 'opacity, transform' : 'auto'
+                    willChange: rich && animationsReady ? 'opacity, transform' : 'auto'
                   }}
                 />
 
                 {/* SVG Loading Rings & Effects */}
-                {animationsReady && (
-                <svg className="absolute -inset-6 sm:-inset-8 md:-inset-10 w-[calc(100%+48px)] h-[calc(100%+48px)] sm:w-[calc(100%+64px)] sm:h-[calc(100%+64px)] md:w-[calc(100%+80px)] md:h-[calc(100%+80px)]" viewBox="0 0 400 400">
+                {showDecor && (
+                <svg key={`rings-${ambient}`} className="absolute -inset-6 sm:-inset-8 md:-inset-10 w-[calc(100%+48px)] h-[calc(100%+48px)] sm:w-[calc(100%+64px)] sm:h-[calc(100%+64px)] md:w-[calc(100%+80px)] md:h-[calc(100%+80px)]" viewBox="0 0 400 400">
                   <defs>
                     <linearGradient id="arcGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stopColor="hsl(202 85% 55%)" stopOpacity="0" />
@@ -598,7 +608,7 @@ export function HeroSection() {
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeDasharray="320 900"
-                    animate={shouldReduceMotion ? undefined : {
+                    animate={!ambient ? undefined : {
                       strokeDashoffset: [0, -1220],
                     }}
                     transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
@@ -612,7 +622,7 @@ export function HeroSection() {
                     strokeWidth="1.2"
                     strokeLinecap="round"
                     strokeDasharray="150 1050"
-                    animate={shouldReduceMotion ? undefined : {
+                    animate={!ambient ? undefined : {
                       strokeDashoffset: [1200, 0],
                     }}
                     transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
@@ -626,7 +636,7 @@ export function HeroSection() {
                     strokeWidth="0.8"
                     strokeLinecap="round"
                     strokeDasharray="40 25 80 25 20 25"
-                    animate={shouldReduceMotion ? undefined : {
+                    animate={!ambient ? undefined : {
                       strokeDashoffset: [0, -215],
                     }}
                     transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
@@ -667,7 +677,7 @@ export function HeroSection() {
                 )}
 
                 {/* Orbiting dots - reduced to 2 for better performance */}
-                {animationsReady && [
+                {showDecor && [
                   { delay: 0, dur: 6, size: 6, color: 'var(--avatar-dot-1)', glow: 'var(--avatar-dot-1-glow)' },
                   { delay: 3, dur: 6, size: 5, color: 'var(--avatar-dot-2)', glow: 'var(--avatar-dot-2-glow)' },
                 ].map((dot, i) => (
@@ -676,7 +686,7 @@ export function HeroSection() {
                     className="absolute -inset-6 sm:-inset-8 md:-inset-10"
                     style={{ 
                       transformOrigin: 'center center',
-                      animation: shouldReduceMotion ? 'none' : `spin-orbit ${dot.dur}s linear infinite`,
+                      animation: !ambient ? 'none' : `spin-orbit ${dot.dur}s linear infinite`,
                       animationDelay: `${dot.delay}s`
                     }}
                   >
@@ -696,10 +706,10 @@ export function HeroSection() {
                 ))}
 
                 {/* Pulse rings - reduced to 2 for better performance */}
-                {animationsReady && [0, 1].map((i) => (
+                {showDecor && ambient && [0, 1].map((i) => (
                   <motion.div
                     key={`pulse-${i}`}
-                    animate={shouldReduceMotion ? undefined : {
+                    animate={{
                       scale: [1, 1.15],
                       opacity: [0.15, 0],
                     }}
@@ -720,7 +730,8 @@ export function HeroSection() {
                 {/* Primary comet-trail spinning border */}
                 {animationsReady && (
                 <motion.div
-                  animate={shouldReduceMotion ? undefined : { rotate: [0, 360] }}
+                  key={`comet-${ambient}`}
+                  animate={!ambient ? undefined : { rotate: [0, 360] }}
                   transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
                   className="absolute inset-0 rounded-full"
                   style={{
@@ -737,7 +748,8 @@ export function HeroSection() {
                 {/* Counter-rotating accent border */}
                 {animationsReady && (
                 <motion.div
-                  animate={shouldReduceMotion ? undefined : { rotate: [360, 0] }}
+                  key={`comet-accent-${ambient}`}
+                  animate={!ambient ? undefined : { rotate: [360, 0] }}
                   transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
                   className="absolute inset-0 rounded-full"
                   style={{
@@ -815,10 +827,11 @@ export function HeroSection() {
                   )}
                 </div>
 
-                {/* Breathing outer glow */}
+                {/* Breathing outer glow — box-shadow animation repaints every frame, so it's static below the high tier */}
                 {animationsReady && (
                 <motion.div
-                  animate={shouldReduceMotion ? undefined : {
+                  key={`breath-${rich}`}
+                  animate={!rich ? undefined : {
                     boxShadow: [
                       'var(--avatar-shadow-1)',
                       'var(--avatar-shadow-2)',
@@ -827,7 +840,7 @@ export function HeroSection() {
                   }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                   className="absolute inset-0 rounded-full pointer-events-none"
-                  style={{ willChange: 'box-shadow' }}
+                  style={rich ? { willChange: 'box-shadow' } : { boxShadow: 'var(--avatar-shadow-1)' }}
                 />
                 )}
               </motion.div>

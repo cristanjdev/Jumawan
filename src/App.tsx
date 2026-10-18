@@ -4,12 +4,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ReactLenis } from "lenis/react";
+import { MotionConfig } from "framer-motion";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { useEffect } from "react";
 import * as React from "react";
 import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
 import { initPerformanceMonitoring } from "@/lib/performance";
+import { usePerformanceStore } from "@/stores/usePerformanceStore";
 
 import { GlobalGlow } from "@/components/ui/global-glow";
 
@@ -17,6 +19,11 @@ const queryClient = new QueryClient();
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 const App = () => {
+  const tier = usePerformanceStore((s) => s.tier);
+  const reduceMotion = usePerformanceStore((s) => s.reduceMotion);
+  // Weak devices (and reduced-motion users) get native scrolling — it's cheaper and never lags the input
+  const smoothWheel = tier !== 'low' && !reduceMotion;
+
   // Initialize performance monitoring in development
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -27,9 +34,9 @@ const App = () => {
   return (
     <ConvexProvider client={convex}>
       <ReactLenis root options={{
-        lerp: 0.08,
+        lerp: tier === 'high' ? 0.08 : 0.12,
         duration: 1.6,
-        smoothWheel: true,
+        smoothWheel,
         wheelMultiplier: 0.9,
         touchMultiplier: 1,
         easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -40,6 +47,8 @@ const App = () => {
         autoResize: true,
         prevent: (node) => node.classList.contains('no-smooth-scroll'),
       }}>
+        {/* Low tier: framer animates opacity only (no transform loops / slide-ins) */}
+        <MotionConfig reducedMotion={tier === 'low' ? 'always' : 'user'}>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
             <Toaster />
@@ -55,6 +64,7 @@ const App = () => {
             </BrowserRouter>
           </TooltipProvider>
         </QueryClientProvider>
+        </MotionConfig>
       </ReactLenis>
     </ConvexProvider>
   );

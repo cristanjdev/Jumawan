@@ -234,6 +234,9 @@ All colors MUST be HSL.
     -moz-osx-font-smoothing: grayscale;
     /* Prevent native smooth-scroll from fighting Lenis */
     scroll-behavior: auto !important;
+    /* Same reason: Lenis owns the scroll position. Native scroll anchoring "corrects" it whenever
+       content re-renders under the cursor (filter tabs, role switches) and the page visibly drifts. */
+    overflow-anchor: none;
     /* Hide scrollbar globally */
     scrollbar-width: none !important;
     /* Firefox */
@@ -350,6 +353,15 @@ All colors MUST be HSL.
       min-height: 44px;
       touch-action: manipulation;
     }
+  }
+
+  /* Low performance tier: backdrop blur is one of the costliest effects on weak GPUs.
+     The surfaces using it sit on opaque or near-opaque backgrounds, so text stays readable. */
+  html[data-perf="low"] *,
+  html[data-perf="low"] *::before,
+  html[data-perf="low"] *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* Enable momentum scrolling on iOS */

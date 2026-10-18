@@ -2,6 +2,7 @@
 
 import { Github, Linkedin, Mail, ArrowUp } from "lucide-react";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 export function Footer() {
   const { scrollToTop, scrollToSection } = useSmoothScroll();
@@ -17,12 +18,7 @@ export function Footer() {
           {/* Brand */}
           <div className="text-center md:text-left">
             <div className="flex items-center justify-center md:justify-start gap-3">
-              <img
-                src="/cjj%20logo.png"
-                alt="CJJ logo"
-                className="h-10 w-auto select-none"
-                draggable={false}
-              />
+              <BrandLogo className="h-9" />
               <span className="text-lg font-bold text-cyan-400">Jumawan Portfolio</span>
             </div>
             <p className="mt-4 text-sm leading-6">
@@ -31,7 +27,7 @@ export function Footer() {
 
             <div className="mt-6 flex items-center justify-center md:justify-start gap-5">
               <a
-                href="https://github.com/"
+                href="https://github.com/cristanjdev"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub"

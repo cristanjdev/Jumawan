@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="86 98.5 308 308" width="32" height="32" role="img" aria-label="CJ logo">
+  <defs>
+    <linearGradient id="sky" gradientUnits="userSpaceOnUse" x1="106" y1="121" x2="374" y2="384">
+      <stop offset="0" stop-color="#7CD4FD"/>
+      <stop offset="1" stop-color="#1AA0EA"/>
+    </linearGradient>
+    <mask id="cutC" maskUnits="userSpaceOnUse" x="-100" y="-100" width="800" height="800">
+      <rect x="-100" y="-100" width="800" height="800" fill="#fff"/>
+      <path d="M345 215 V305 A55 55 0 0 1 235 305" fill="none" stroke="#000" stroke-width="72" stroke-linecap="round"/>
+      <circle cx="290" cy="305" r="32" fill="#000"/>
+    </mask>
+  </defs>
+  <path d="M269.6 209.9 A85 85 0 1 0 269.6 340.1" fill="none" stroke="url(#sky)" stroke-width="48"
+        stroke-linecap="round" mask="url(#cutC)"/>
+  <path d="M345 215 V305 A55 55 0 0 1 235 305" fill="none" stroke="url(#sky)" stroke-width="48" stroke-linecap="round"/>
+  <path fill="url(#sky)" fill-rule="evenodd"
+        d="M316 150 a29 29 0 1 0 58 0 a29 29 0 1 0 -58 0 Z M333 150 a12 12 0 1 1 24 0 a12 12 0 1 1 -24 0 Z"/>
+  <circle cx="345" cy="150" r="5" fill="url(#sky)"/>
+</svg>

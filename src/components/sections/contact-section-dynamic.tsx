@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle, Github, Linkedin, Twitter, Facebook, Instagram, Music } from "lucide-react";
+import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle, Github, Linkedin, Twitter, Facebook, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
+import { useContactStore } from "@/stores/useContactStore";
 
 import { cn } from "@/lib/utils";
 
@@ -33,28 +33,7 @@ export function ContactSection() {
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-  const submitMessage = async (data: FormData) => {
-    setIsSubmitting(true);
-    try {
-      // Simulate submission
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setSubmitStatus('success');
-      return true;
-    } catch (error) {
-      console.error('Error submitting form:', error);
-      setSubmitStatus('error');
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const resetStatus = () => {
-    setSubmitStatus('idle');
-  };
+  const { isSubmitting, submitStatus, submitMessage, resetStatus } = useContactStore();
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -98,7 +77,12 @@ export function ContactSection() {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const success = await submitMessage(formData);
+    const success = await submitMessage({
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      subject: formData.subject.trim(),
+      message: formData.message.trim(),
+    });
 
     if (success) {
       setFormData({
@@ -137,7 +121,7 @@ export function ContactSection() {
   ];
 
   const socialLinks = [
-    { icon: Github, label: "GitHub", href: "https://github.com/blutech18", color: "hover:text-white" },
+    { icon: Github, label: "GitHub", href: "https://github.com/cristanjdev", color: "hover:text-white" },
     { icon: Linkedin, label: "LinkedIn", href: "https://www.linkedin.com/in/cristan-jade-jumawan-45b27b39b", color: "hover:text-blue-400" },
     { icon: Twitter, label: "Twitter", href: "https://twitter.com/cristanjade", color: "hover:text-sky-400" },
     { icon: Facebook, label: "Facebook", href: "https://facebook.com/yourprofile", color: "hover:text-blue-600" },
@@ -263,6 +247,12 @@ export function ContactSection() {
                         </span>
                       )}
                     </Button>
+                    {submitStatus === 'error' && (
+                      <p role="alert" className="flex items-center justify-center gap-2 text-destructive text-sm">
+                        <AlertCircle className="w-4 h-4" />
+                        Your message couldn't be sent. Please try again or email me directly.
+                      </p>
+                    )}
                   </form>
                 </div>
               </motion.div>

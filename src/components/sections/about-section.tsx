@@ -168,7 +168,7 @@ export function AboutSection() {
                                             </p>
                                         </div>
                                         <div className="flex justify-center sm:justify-end sm:pl-6">
-                                            <img src="/blutech2.png" alt="Blutech Logo" className="w-full max-w-[140px] sm:max-w-[120px] h-auto object-contain" />
+                                            <img src="/blutech2.webp" alt="Blutech Logo" loading="lazy" decoding="async" className="w-full max-w-[140px] sm:max-w-[120px] h-auto object-contain" />
                                         </div>
                                     </div>
                                 </div>

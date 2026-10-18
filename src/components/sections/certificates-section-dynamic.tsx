@@ -1,605 +1,492 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent as ReactMouseEvent } from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Card } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { motion } from "framer-motion";
+import { Award, ArrowRight, ArrowUpRight, BadgeCheck, ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { OptimizedImage } from "@/components/ui/OptimizedImage";
-import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
-import { Award, Calendar, ExternalLink, X, BadgeCheck, Building2, Trophy, Medal, ZoomIn, ZoomOut } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DialogBar } from "@/components/ui/dialog-bar";
+import { useReturnFocus } from "@/hooks/use-return-focus";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
+import { actionButton, dialogShell, iconButton, reveal } from "@/lib/section-ui";
+import { cn } from "@/lib/utils";
 import { useCertificateStore, Certificate } from "@/stores/useCertificateStore";
-import { convexClient } from '@/lib/convexClient';
-import { api } from '../../../convex/_generated/api';
+import { convexClient } from "@/lib/convexClient";
+import { api } from "../../../convex/_generated/api";
 
-export function CertificatesSection() {
-  const shouldReduceMotion = useReducedMotion();
-  const { certificates, loading, fetchCertificates, subscribeToChanges } = useCertificateStore();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [isMobile, setIsMobile] = useState(false);
-  const [currentCard, setCurrentCard] = useState(0);
-  const [showAllModal, setShowAllModal] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'recognition' | 'participation'>('all');
-  const [verificationImageUrl, setVerificationImageUrl] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const savedScrollLeft = useRef(0);
+type Filter = "all" | "recognition" | "participation";
 
-  useEffect(() => {
-    fetchCertificates();
-    trackPageView();
-    const unsubscribe = subscribeToChanges();
-    return () => { unsubscribe(); };
-  }, []);
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "recognition", label: "Recognition" },
+  { key: "participation", label: "Participation" },
+];
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+const MAX_ZOOM = 4;
 
-  // Sort & filter certificates: "all" shows recognition first then participation, each by order_index
-  const filteredCertificates = useMemo(() => {
-    if (activeFilter === 'recognition') {
-      return certificates
-        .filter(c => c.type === 'recognition')
-        .sort((a, b) => a.order_index - b.order_index);
-    }
-    if (activeFilter === 'participation') {
-      return certificates
-        .filter(c => c.type === 'participation')
-        .sort((a, b) => a.order_index - b.order_index);
-    }
-    // "all": recognition first (sorted), then participation (sorted)
-    const recognition = certificates
-      .filter(c => c.type === 'recognition')
-      .sort((a, b) => a.order_index - b.order_index);
-    const participation = certificates
-      .filter(c => c.type === 'participation')
-      .sort((a, b) => a.order_index - b.order_index);
-    const others = certificates
-      .filter(c => c.type !== 'recognition' && c.type !== 'participation')
-      .sort((a, b) => a.order_index - b.order_index);
-    return [...recognition, ...participation, ...others];
-  }, [certificates, activeFilter]);
+// ─── helpers ────────────────────────────────────────────────────────────────
 
-  // Restore scroll position after certificates re-render
-  useEffect(() => {
-    if (scrollRef.current && filteredCertificates.length > 0 && savedScrollLeft.current > 0) {
-      scrollRef.current.scrollLeft = savedScrollLeft.current;
-    }
-  }, [filteredCertificates]);
+// Certificates without a type are treated as participation everywhere
+const kindOf = (cert: Certificate): "recognition" | "participation" =>
+  cert.type === "recognition" ? "recognition" : "participation";
 
-  // Reset carousel to first card when filter changes
-  useEffect(() => {
-    setCurrentCard(0);
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-    }
-  }, [activeFilter]);
+const kindLabel = (cert: Certificate) => (kindOf(cert) === "recognition" ? "Recognition" : "Participation");
 
-  const cardsPerPage = isMobile ? 1 : 2;
-  const totalPages = Math.ceil(filteredCertificates.length / cardsPerPage);
-  const currentPage = Math.floor(currentCard / cardsPerPage);
+// Issue dates are calendar dates, so format them in UTC — otherwise visitors west of
+// UTC see the previous month on dates like "2023-01-01".
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
 
-  const handleScroll = useCallback(() => {
-    if (!scrollRef.current || filteredCertificates.length === 0) return;
-    const el = scrollRef.current;
-    savedScrollLeft.current = el.scrollLeft;
-    const cardWidth = el.scrollWidth / filteredCertificates.length;
-    const idx = Math.round(el.scrollLeft / cardWidth);
-    setCurrentCard(Math.max(0, Math.min(idx, filteredCertificates.length - 1)));
-  }, [filteredCertificates.length]);
+// Only ever link out to http(s) — never javascript: or data: URLs coming from the database
+function safeHttpUrl(value?: string) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
-  const scrollToCard = (idx: number) => {
-    if (!scrollRef.current || filteredCertificates.length === 0) return;
-    const clamped = Math.max(0, Math.min(idx, filteredCertificates.length - 1));
-    const el = scrollRef.current;
-    const cardWidth = el.scrollWidth / filteredCertificates.length;
-    el.scrollTo({ left: cardWidth * clamped, behavior: 'smooth' });
-  };
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-  const scrollToPage = (page: number) => {
-    scrollToCard(page * cardsPerPage);
-  };
+// ─── building blocks ────────────────────────────────────────────────────────
 
-  const goToPrevPage = () => { if (currentPage > 0) scrollToPage(currentPage - 1); };
-  const goToNextPage = () => { if (currentPage < totalPages - 1) scrollToPage(currentPage + 1); };
+// Image with a quiet loading state and an icon fallback. Re-key it when `src` changes.
+function CertImage({ src, alt, className }: { src?: string; alt: string; className?: string }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
 
-  // Drag/swipe handling — works for both mouse (desktop) and touch (mobile)
-  const isDraggingScroll = useRef(false);
-  const hasDragged = useRef(false);
-  const dragStartX = useRef(0);
-  const dragScrollLeft = useRef(0);
-  const dragStartCard = useRef(0);
-  const momentumRaf = useRef<number>(0);
-
-  const startDrag = (clientX: number) => {
-    if (!scrollRef.current) return;
-    cancelAnimationFrame(momentumRaf.current);
-    isDraggingScroll.current = true;
-    hasDragged.current = false;
-    dragStartX.current = clientX;
-    dragScrollLeft.current = scrollRef.current.scrollLeft;
-    dragStartCard.current = currentCard;
-    scrollRef.current.style.scrollSnapType = 'none';
-    scrollRef.current.style.scrollBehavior = 'auto';
-    if (!isMobile) scrollRef.current.style.cursor = 'grabbing';
-  };
-
-  const moveDrag = (clientX: number) => {
-    if (!isDraggingScroll.current || !scrollRef.current) return;
-    const walk = clientX - dragStartX.current;
-    if (Math.abs(walk) > 5) hasDragged.current = true;
-    scrollRef.current.scrollLeft = dragScrollLeft.current - walk;
-  };
-
-  const endDrag = (clientX: number) => {
-    if (!isDraggingScroll.current || !scrollRef.current) return;
-    isDraggingScroll.current = false;
-    const el = scrollRef.current;
-    el.style.cursor = '';
-    el.style.scrollSnapType = '';
-    el.style.scrollBehavior = '';
-
-    const swipeDist = clientX - dragStartX.current;
-    const threshold = 30;
-    const startPage = Math.floor(dragStartCard.current / cardsPerPage);
-
-    if (Math.abs(swipeDist) > threshold) {
-      const targetPage = swipeDist < 0
-        ? Math.min(startPage + 1, totalPages - 1)
-        : Math.max(startPage - 1, 0);
-      scrollToPage(targetPage);
-    } else {
-      scrollToPage(startPage);
-    }
-  };
-
-  const onMouseDown = (e: ReactMouseEvent) => {
-    if (isMobile) return;
-    startDrag(e.pageX);
-  };
-  const onMouseMove = (e: ReactMouseEvent) => {
-    if (!isDraggingScroll.current) return;
-    e.preventDefault();
-    moveDrag(e.pageX);
-  };
-  const onMouseUp = (e: ReactMouseEvent) => {
-    endDrag(e.pageX);
-  };
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    startDrag(e.touches[0].clientX);
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    moveDrag(e.touches[0].clientX);
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    endDrag(e.changedTouches[0].clientX);
-  };
-
-  const trackPageView = async () => {
-    try {
-      await convexClient.mutation(api.analytics.track, {
-        event_type: 'page_view',
-        page_url: '/certificates',
-        event_data: { section: 'certificates' },
-      });
-    } catch (error) {
-      console.warn('Analytics tracking error:', error);
-    }
-  };
-
-  const openModalAt = useCallback((index: number) => {
-    setSelectedIndex(index);
-    setIsModalOpen(true);
-    setZoomLevel(1);
-  }, []);
-
-  const safeOpenModal = useCallback((index: number) => {
-    if (hasDragged.current) { hasDragged.current = false; return; }
-    openModalAt(index);
-  }, [openModalAt]);
-
-  const closeModal = useCallback(() => {
-    setIsModalOpen(false);
-    setZoomLevel(1);
-    setTimeout(() => { setSelectedIndex(null); }, 150);
-  }, []);
-
-  const containerVariants = useMemo(() => ({
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.6, staggerChildren: shouldReduceMotion ? 0 : 0.18 } },
-  }), [shouldReduceMotion]);
-
-  const itemVariants = useMemo(() => ({
-    hidden: { y: 20, opacity: 0 },
-    visible: { y: 0, opacity: 1, transition: { type: "spring" as const, stiffness: 80, damping: 12 } },
-  }), []);
-
-  // --- Shared card renderer ---
-  const renderCard = (cert: Certificate, index: number) => (
-    <div
-      onClick={() => safeOpenModal(index)}
-      className={`h-full relative border border-border/50 rounded-xl transition-all duration-500 ease-in-out hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)] overflow-hidden cursor-pointer group ${isMobile ? '' : ''}`}
-    >
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
-
-      <div className="relative h-[295px] sm:h-[359px] w-full overflow-hidden">
-        {cert.image_url ? (
-          <>
-            <OptimizedImage
-              src={cert.image_url}
-              alt={`${cert.title} certificate`}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 bg-muted/5"
-              draggable={false}
-              fallbackIcon={<Award className="h-12 w-12 text-muted-foreground" />}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[var(--card-overlay-from)] via-transparent to-transparent" />
-          </>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-muted/10">
-            <Award className="h-12 w-12 text-muted-foreground/30" />
-          </div>
-        )}
-        <div className="absolute top-2.5 left-2.5 z-10">
-          <Badge variant="secondary" className={`backdrop-blur-md border-0 shadow-lg text-[10px] sm:text-xs px-2 py-0.5 ${cert.type === 'recognition' ? 'bg-primary/90 text-primary-foreground' : 'bg-secondary/90 text-secondary-foreground'}`}>
-            {cert.type === 'recognition' ? <Trophy className="h-3 w-3 mr-1" /> : <Medal className="h-3 w-3 mr-1" />}
-            <span className="capitalize font-medium">{cert.type || 'Participation'}</span>
-          </Badge>
-        </div>
-      </div>
-
-      <div className="p-3.5 sm:p-5 h-[120px] sm:h-[140px] flex flex-col">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-sm sm:text-base font-semibold text-foreground leading-snug group-hover:text-primary transition-colors duration-300 line-clamp-2 flex-1">
-            {cert.title}
-          </h3>
-          {(cert.credential_url || cert.verification_image_url) && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (cert.verification_image_url) {
-                  setVerificationImageUrl(cert.verification_image_url);
-                } else if (cert.credential_url) {
-                  window.open(cert.credential_url, '_blank', 'noopener,noreferrer');
-                }
-              }}
-              className="shrink-0 inline-flex items-center gap-1 text-[10px] sm:text-xs font-medium px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 hover:border-cyan-400/50 transition-all duration-300 hover:shadow-[0_0_8px_rgba(34,211,238,0.15)]"
-            >
-              <BadgeCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              Verify
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] sm:text-xs text-muted-foreground/70 mt-2 sm:mt-3">
-          <span className="flex items-center gap-1">
-            <Building2 className="h-3 w-3 text-primary/60 shrink-0" />{cert.issuer}
-          </span>
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3 text-primary/60 shrink-0" />
-            {new Date(cert.issue_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-          </span>
-        </div>
-        {cert.description && (
-          <p className="text-[11px] sm:text-xs text-muted-foreground/60 leading-relaxed line-clamp-2 mt-auto">{cert.description}</p>
-        )}
-      </div>
-    </div>
-  );
-
-  if (loading) {
+  if (!src || state === "error") {
     return (
-      <section id="certificates" className="py-20 bg-transparent relative overflow-hidden">
-        <div className="container mx-auto px-6 relative z-10">
-          <div className="flex flex-col items-center mb-16 mx-auto w-fit">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
-              <span className="text-cyan-400">
-                Certificates & Achievements
-              </span>
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
-              Professional certifications that validate my technical expertise
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {[...Array(4)].map((_, idx) => (
-              <Card key={idx} className="h-full bg-gradient-card border-border/20 shadow-card overflow-hidden">
-                <div className="relative h-48 w-full">
-                  <Skeleton className="absolute inset-0" />
-                </div>
-                <div className="p-6 space-y-4">
-                  <div className="flex items-start gap-4">
-                    <Skeleton className="w-12 h-12 rounded-lg" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-6 w-3/5" />
-                      <Skeleton className="h-4 w-2/5" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-5/6" />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground/40">
+        <Award className="h-8 w-8" strokeWidth={1.5} />
+      </div>
     );
   }
 
   return (
     <>
-      <section id="certificates" className="py-24 relative overflow-hidden">
-      <div className="container px-4 md:px-6 relative z-10">
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.05 }}
-          variants={containerVariants}
-          className="max-w-6xl mx-auto"
-        >
-          <motion.div variants={itemVariants} className="flex flex-col items-center mb-16 mx-auto w-fit">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
-              <span className="text-cyan-400">
-                Certificates & Achievements
-              </span>
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
-              Professional certifications that validate my technical expertise
-            </p>
-          </motion.div>
-
-          {certificates.length === 0 ? (
-            <div className="text-center py-12">
-              <Award className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-medium text-white mb-2">No certificates yet</h3>
-              <p className="text-muted-foreground">Certificates will be displayed here once added</p>
-            </div>
-          ) : (
-            <>
-              {/* Filter buttons + See All */}
-              <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-6 sm:mb-8">
-                {([
-                  { key: 'all', label: 'All', icon: Award },
-                  { key: 'recognition', label: 'Recognition', icon: Trophy },
-                  { key: 'participation', label: 'Participation', icon: Medal },
-                ] as const).map(({ key, label, icon: Icon }) => (
-                  <Button
-                    key={key}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setActiveFilter(key)}
-                    className={`text-xs sm:text-sm transition-all duration-300 ${
-                      activeFilter === key
-                        ? 'border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.15)]'
-                        : 'border-border/40 hover:border-cyan-400/40 hover:bg-cyan-400/5 text-muted-foreground hover:text-cyan-400'
-                    }`}
-                  >
-                    <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1.5" />
-                    {label}
-                    <span className="ml-1.5 text-[10px] sm:text-xs opacity-60">
-                      {key === 'all'
-                        ? certificates.length
-                        : certificates.filter(c => c.type === key).length}
-                    </span>
-                  </Button>
-                ))}
-
-                <div className="w-px h-5 bg-border/30 mx-1 hidden sm:block" />
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAllModal(true)}
-                  className="border-border/40 hover:border-cyan-400/40 hover:bg-cyan-400/5 text-muted-foreground hover:text-cyan-400 transition-all duration-300 text-xs sm:text-sm"
-                >
-                  <Award className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1.5" />
-                  See All
-                </Button>
-              </motion.div>
-
-              {/* Unified swipeable carousel — 1 card mobile, 2 cards desktop */}
-              {filteredCertificates.length === 0 ? (
-                <motion.div variants={itemVariants} className="text-center py-12">
-                  <Award className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No {activeFilter} certificates found</p>
-                </motion.div>
-              ) : (
-              <motion.div variants={itemVariants} className="relative overflow-hidden -mx-4 md:-mx-6">
-                <div
-                  ref={scrollRef}
-                  onScroll={handleScroll}
-                  onMouseDown={onMouseDown}
-                  onMouseMove={onMouseMove}
-                  onMouseUp={onMouseUp}
-                  onMouseLeave={onMouseUp}
-                  onTouchStart={onTouchStart}
-                  onTouchMove={onTouchMove}
-                  onTouchEnd={onTouchEnd}
-                  className={`flex gap-4 md:gap-6 overflow-x-auto pb-4 scroll-smooth ${!isMobile ? 'cursor-grab' : ''}`}
-                  style={{
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    WebkitOverflowScrolling: 'touch',
-                    touchAction: 'pan-y',
-                    overscrollBehaviorX: 'contain',
-                    overscrollBehaviorY: 'auto',
-                    paddingLeft: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : '24px',
-                    paddingRight: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : '24px',
-                  }}
-                >
-                  {filteredCertificates.map((cert, index) => (
-                    <div
-                      key={cert.id}
-                      className="shrink-0"
-                      style={{ width: isMobile ? 'min(80vw, 340px)' : 'calc(50% - 12px)' }}
-                    >
-                      {renderCard(cert, index)}
-                    </div>
-                  ))}
-                </div>
-
-                {totalPages > 1 && (
-                  <div className="flex flex-col items-center gap-2 mt-4">
-                    <div className="flex items-center gap-1.5">
-                      {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          aria-label={`Go to page ${i + 1}`}
-                          onClick={() => scrollToPage(i)}
-                          className={`rounded-full transition-all duration-300 ${i === currentPage ? "w-6 h-2 bg-cyan-400" : "w-2 h-2 bg-border/20 hover:bg-border/40"}`}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-[11px] text-muted-foreground/40 italic">{isMobile ? 'Swipe' : 'Drag'} to explore · {currentPage + 1} / {totalPages}</span>
-                  </div>
-                )}
-              </motion.div>
-              )}
-            </>
-          )}
-        </motion.div>
-
-        {/* Certificate detail modal */}
-        <CertificatesModal
-          isOpen={isModalOpen}
-          onOpenChange={(open) => (open ? setIsModalOpen(true) : closeModal())}
-          certificates={filteredCertificates}
-          selectedIndex={selectedIndex}
-          zoomLevel={zoomLevel}
-          setZoomLevel={setZoomLevel}
-          onVerificationImage={(url) => setVerificationImageUrl(url)}
-        />
-
-        {/* See All modal — always shows all certificates with proper sorting */}
-        <SeeAllCertificatesModal
-          isOpen={showAllModal}
-          onOpenChange={setShowAllModal}
-          certificates={filteredCertificates}
-          onSelect={(index) => {
-            openModalAt(index);
-          }}
-        />
-      </div>
-    </section>
-
-      <VerificationImageModal
-        imageUrl={verificationImageUrl}
-        onClose={() => setVerificationImageUrl(null)}
+      {state === "loading" && <div className="absolute inset-0 animate-pulse bg-muted/20" />}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={() => setState("loaded")}
+        onError={() => setState("error")}
+        className={cn(
+          "h-full w-full object-cover transition-opacity duration-300",
+          state === "loaded" ? "opacity-100" : "opacity-0",
+          className
+        )}
       />
     </>
   );
 }
 
-import { useLenis } from 'lenis/react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+// Pan / zoom viewer shared by the detail and verification modals.
+// Wheel, buttons, double-click and pinch zoom; drag to pan while zoomed.
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [state, setState] = useState<"loading" | "loaded" | "error">(src ? "loading" : "error");
+  const areaRef = useRef<HTMLDivElement>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
+  const dragOrigin = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
-// See All Certificates Modal — file-manager style grid
-function SeeAllCertificatesModal({
-  isOpen,
+  const clampPan = useCallback((x: number, y: number, z: number) => {
+    const rect = areaRef.current?.getBoundingClientRect();
+    if (!rect) return { x, y };
+    const maxX = (rect.width * (z - 1)) / 2;
+    const maxY = (rect.height * (z - 1)) / 2;
+    return { x: clamp(x, -maxX, maxX), y: clamp(y, -maxY, maxY) };
+  }, []);
+
+  // Keep the image inside the frame whenever the zoom changes (and recentre at 100%)
+  useEffect(() => {
+    setPan((p) => clampPan(p.x, p.y, zoom));
+  }, [zoom, clampPan]);
+
+  // React's onWheel is passive, so zooming (which needs preventDefault) is attached natively
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => clamp(z * Math.exp(-e.deltaY * 0.0015), 1, MAX_ZOOM));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const isControl = (target: EventTarget | null) => (target as HTMLElement | null)?.closest("[data-viewer-control]");
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isControl(e.target)) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+    } else {
+      dragOrigin.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+    }
+    setDragging(true);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 2 && pinch.current) {
+      const [a, b] = [...pointers.current.values()];
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      setZoom(clamp((pinch.current.zoom * distance) / pinch.current.distance, 1, MAX_ZOOM));
+    } else if (zoom > 1) {
+      const o = dragOrigin.current;
+      setPan(clampPan(o.panX + e.clientX - o.x, o.panY + e.clientY - o.y, zoom));
+    }
+  };
+
+  const onPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.delete(e.pointerId)) return;
+    pinch.current = null;
+    const remaining = [...pointers.current.values()][0];
+    if (remaining) {
+      // One finger left after a pinch: carry on panning from where it is now
+      dragOrigin.current = { x: remaining.x, y: remaining.y, panX: pan.x, panY: pan.y };
+    } else {
+      setDragging(false);
+    }
+  };
+
+  const step = (factor: number) => setZoom((z) => clamp(z * factor, 1, MAX_ZOOM));
+
+  return (
+    <div
+      ref={areaRef}
+      className={cn(
+        "relative h-full w-full touch-none select-none overflow-hidden",
+        zoom > 1 && (dragging ? "cursor-grabbing" : "cursor-grab")
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onDoubleClick={(e) => {
+        if (!isControl(e.target)) setZoom((z) => (z > 1 ? 1 : 2));
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="absolute inset-0 flex items-center justify-center px-4 pb-14 pt-4 sm:px-6 sm:pt-6">
+        {state === "error" ? (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground/50">
+            <Award className="h-10 w-10" strokeWidth={1.5} />
+            <span className="text-sm">Image unavailable</span>
+          </div>
+        ) : (
+          <>
+            {state === "loading" && <div className="absolute inset-x-6 bottom-14 top-6 animate-pulse rounded-lg bg-muted/20" />}
+            <img
+              src={src}
+              alt={alt}
+              draggable={false}
+              onLoad={() => setState("loaded")}
+              onError={() => setState("error")}
+              className={cn(
+                "max-h-full max-w-full rounded-sm object-contain shadow-lg transition-opacity duration-300",
+                state === "loaded" ? "opacity-100" : "opacity-0"
+              )}
+              style={{
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                transition: dragging ? "none" : "transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 300ms",
+                willChange: "transform",
+              }}
+            />
+          </>
+        )}
+      </div>
+
+      <div
+        data-viewer-control
+        className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-border/50 bg-background/90 p-0.5 shadow-sm"
+      >
+        <button type="button" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => step(1 / 1.25)} className={iconButton}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Reset zoom"
+          disabled={zoom === 1}
+          onClick={() => setZoom(1)}
+          className="min-w-[3.25rem] px-1 text-xs tabular-nums text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button type="button" aria-label="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => step(1.25)} className={iconButton}>
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── cards ──────────────────────────────────────────────────────────────────
+
+function CertificateCard({
+  cert,
+  onOpen,
+  onVerifyImage,
+}: {
+  cert: Certificate;
+  onOpen: () => void;
+  onVerifyImage: (url: string) => void;
+}) {
+  const credentialUrl = safeHttpUrl(cert.credential_url);
+  const verifyClass =
+    "absolute bottom-0 right-0 inline-flex items-center gap-1 text-xs font-medium leading-5 text-primary transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:underline";
+  const date = formatDate(cert.issue_date);
+
+  return (
+    <article className="group relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+      >
+        <div className="relative aspect-[3/2] overflow-hidden rounded-xl border border-border/50 bg-muted/10 transition-colors duration-300 group-hover:border-primary/50">
+          <CertImage
+            key={cert.image_url}
+            src={cert.image_url}
+            alt={`${cert.title} certificate`}
+            className="transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+          />
+        </div>
+
+        <div className="mt-3.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+            {kindLabel(cert)}
+            {date && <> · {date}</>}
+          </p>
+          <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-foreground transition-colors duration-300 group-hover:text-primary">
+            {cert.title}
+          </h3>
+          <p className="mt-1 truncate pr-16 text-[13px] leading-5 text-muted-foreground">{cert.issuer}</p>
+        </div>
+      </button>
+
+      {cert.verification_image_url ? (
+        <button type="button" onClick={() => onVerifyImage(cert.verification_image_url!)} className={verifyClass}>
+          <BadgeCheck className="h-3.5 w-3.5" />
+          Verify
+        </button>
+      ) : credentialUrl ? (
+        <a href={credentialUrl} target="_blank" rel="noopener noreferrer" className={verifyClass}>
+          <BadgeCheck className="h-3.5 w-3.5" />
+          Verify
+        </a>
+      ) : null}
+    </article>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <div>
+      <Skeleton className="aspect-[3/2] w-full rounded-xl" />
+      <Skeleton className="mt-4 h-3 w-1/3" />
+      <Skeleton className="mt-2.5 h-4 w-4/5" />
+      <Skeleton className="mt-2 h-4 w-3/5" />
+    </div>
+  );
+}
+
+// ─── modals ─────────────────────────────────────────────────────────────────
+
+interface ViewerState {
+  list: Certificate[];
+  index: number;
+}
+
+function CertificateViewer({
+  viewer,
+  onClose,
+  onNavigate,
+  onVerifyImage,
+  keysEnabled,
+  onCloseAutoFocus,
+}: {
+  viewer: ViewerState | null;
+  onClose: () => void;
+  onNavigate: (delta: number) => void;
+  onVerifyImage: (url: string) => void;
+  keysEnabled: boolean;
+  onCloseAutoFocus: (event: Event) => void;
+}) {
+  // Remember the last certificate so the content survives the close animation
+  const latest = useRef(viewer);
+  if (viewer) latest.current = viewer;
+  const data = latest.current;
+  const open = viewer !== null;
+
+  useEffect(() => {
+    if (!open || !keysEnabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") onNavigate(-1);
+      else if (e.key === "ArrowRight") onNavigate(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, keysEnabled, onNavigate]);
+
+  const cert = data?.list[data.index];
+  if (!data || !cert) return null;
+
+  const { list, index } = data;
+  const credentialUrl = safeHttpUrl(cert.credential_url);
+  const date = formatDate(cert.issue_date);
+  const navButton =
+    "absolute top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border/50 bg-background/90 text-foreground/80 shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-0";
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className={cn(dialogShell, "max-w-5xl")} onCloseAutoFocus={onCloseAutoFocus}>
+        <div className="flex h-[min(90dvh,820px)] flex-col" data-lenis-prevent>
+          <DialogBar
+            title={cert.title}
+            description={[cert.issuer, date].filter(Boolean).join(" · ")}
+          />
+
+          <div className="relative min-h-0 flex-1 bg-muted/10">
+            <ZoomableImage key={cert.image_url} src={cert.image_url ?? ""} alt={`${cert.title} certificate`} />
+            {list.length > 1 && (
+              <>
+                <button type="button" aria-label="Previous certificate" disabled={index === 0} onClick={() => onNavigate(-1)} className={cn(navButton, "left-3")}>
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button type="button" aria-label="Next certificate" disabled={index === list.length - 1} onClick={() => onNavigate(1)} className={cn(navButton, "right-3")}>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-3 border-t border-border/40 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  {kindLabel(cert)}
+                </span>
+                {cert.credential_id && <span className="font-mono">ID {cert.credential_id}</span>}
+                <span className="tabular-nums">
+                  {index + 1} / {list.length}
+                </span>
+              </div>
+              {cert.description && (
+                <p className="max-h-24 max-w-prose overflow-y-auto text-sm leading-relaxed text-muted-foreground">{cert.description}</p>
+              )}
+            </div>
+
+            {(cert.verification_image_url || credentialUrl) && (
+              <div className="flex shrink-0 gap-2">
+                {cert.verification_image_url && (
+                  <button type="button" onClick={() => onVerifyImage(cert.verification_image_url!)} className={actionButton}>
+                    <BadgeCheck className="h-4 w-4 text-primary" />
+                    Verification
+                  </button>
+                )}
+                {credentialUrl && (
+                  <a href={credentialUrl} target="_blank" rel="noopener noreferrer" className={actionButton}>
+                    Credential
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VerificationViewer({
+  url,
+  onClose,
+  onCloseAutoFocus,
+}: {
+  url: string | null;
+  onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+}) {
+  const latest = useRef(url);
+  if (url) latest.current = url;
+  const src = latest.current;
+  if (!src) return null;
+
+  return (
+    <Dialog open={url !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className={cn(dialogShell, "max-w-4xl")} onCloseAutoFocus={onCloseAutoFocus}>
+        <div className="flex h-[min(88dvh,780px)] flex-col" data-lenis-prevent>
+          <DialogBar title="Verification" description="Proof of authenticity for this certificate" />
+          <div className="relative min-h-0 flex-1 bg-muted/10">
+            <ZoomableImage key={src} src={src} alt="Verification proof" />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AllCertificatesDialog({
+  open,
   onOpenChange,
   certificates,
   onSelect,
+  onCloseAutoFocus,
 }: {
-  isOpen: boolean;
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   certificates: Certificate[];
   onSelect: (index: number) => void;
+  onCloseAutoFocus: (event: Event) => void;
 }) {
-  const lenis = useLenis();
-
-  useEffect(() => {
-    if (isOpen) {
-      lenis?.stop();
-      document.body.style.overflow = 'hidden';
-    } else {
-      lenis?.start();
-      document.body.style.overflow = '';
-    }
-    return () => {
-      lenis?.start();
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, lenis]);
-
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl border-[var(--border-subtle)] bg-[var(--surface-modal)] backdrop-blur-2xl !p-0 !gap-0 [&>button]:z-20 rounded-2xl md:rounded-3xl shadow-2xl">
-        <div className="flex flex-col h-[85svh] md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl" data-lenis-prevent>
-          <div className="relative shrink-0 px-5 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-[var(--border-subtle)] bg-[var(--surface-bg-alt)]">
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent rounded-t-2xl md:rounded-t-3xl" />
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl font-bold text-foreground">
-                All Certificates ({certificates.length})
-              </DialogTitle>
-            </DialogHeader>
-          </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={cn(dialogShell, "max-w-5xl")} onCloseAutoFocus={onCloseAutoFocus}>
+        <div className="flex h-[min(88dvh,820px)] flex-col">
+          <DialogBar title="All certificates" description={`${certificates.length} in total`} />
 
-          <div
-            className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-6 bg-[var(--surface-bg-alt)] overscroll-contain scroll-smooth scrollbar-hide"
-            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-          >
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pb-12">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-6" data-lenis-prevent>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-7 md:grid-cols-3 lg:grid-cols-4">
               {certificates.map((cert, index) => (
                 <button
                   key={cert.id}
                   type="button"
                   onClick={() => onSelect(index)}
-                  className="group text-left rounded-xl border border-border/40 overflow-hidden hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-500 bg-background/40 backdrop-blur-sm"
+                  className="group rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface-modal)]"
                 >
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/10">
-                    {cert.image_url ? (
-                      <OptimizedImage
-                        src={cert.image_url}
-                        alt={cert.title}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        draggable={false}
-                        fallbackIcon={<Award className="h-8 w-8 text-muted-foreground/30" />}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Award className="h-8 w-8 text-muted-foreground/30" />
-                      </div>
-                    )}
-                    {cert.type && (
-                      <div className="absolute top-2 left-2 z-10">
-                        <Badge variant="secondary" className={`backdrop-blur-md border-0 text-[9px] sm:text-[10px] px-2 py-0.5 ${cert.type === 'recognition' ? 'bg-primary/90 text-primary-foreground' : 'bg-secondary/90 text-secondary-foreground'}`}>
-                          {cert.type === 'recognition' ? <Trophy className="h-2.5 w-2.5 mr-1" /> : <Medal className="h-2.5 w-2.5 mr-1" />}
-                          <span className="capitalize font-medium">{cert.type}</span>
-                        </Badge>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative aspect-[3/2] overflow-hidden rounded-lg border border-border/50 bg-muted/10 transition-colors duration-300 group-hover:border-primary/50">
+                    <CertImage
+                      key={cert.image_url}
+                      src={cert.image_url}
+                      alt={`${cert.title} certificate`}
+                      className="transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+                    />
                   </div>
-                  <div className="p-3 sm:p-4 min-h-[80px] sm:min-h-[90px] flex flex-col justify-start">
-                    <p className="text-xs sm:text-sm font-bold text-foreground leading-tight line-clamp-2 group-hover:text-cyan-400 transition-colors duration-300">
-                      {cert.title}
-                    </p>
-                    <p className="text-[10px] sm:text-[11px] text-muted-foreground/60 mt-2 truncate font-medium">
-                      {cert.issuer}
-                    </p>
-                  </div>
+                  <p className="mt-2.5 line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors group-hover:text-primary">
+                    {cert.title}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {[cert.issuer, formatDate(cert.issue_date)].filter(Boolean).join(" · ")}
+                  </p>
                 </button>
               ))}
             </div>
@@ -610,416 +497,247 @@ function SeeAllCertificatesModal({
   );
 }
 
-// Verification Image Modal — same visual design as resume modal
-function VerificationImageModal({
-  imageUrl,
-  onClose,
-}: {
-  imageUrl: string | null;
-  onClose: () => void;
-}) {
-  const [zoom, setZoom] = useState(1);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [mounted, setMounted] = useState(false);
-  const lenis = useLenis();
+// ─── section ────────────────────────────────────────────────────────────────
 
-  useEffect(() => { setMounted(true); }, []);
+export function CertificatesSection() {
+  const { certificates, loading, fetchCertificates, subscribeToChanges } = useCertificateStore();
+  const [activeFilter, setActiveFilter] = useState<Filter>("all");
+  const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [edges, setEdges] = useState({ start: true, end: false });
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (imageUrl) { lenis?.stop(); document.body.style.overflow = 'hidden'; }
-    else { lenis?.start(); document.body.style.overflow = ''; }
-    return () => { lenis?.start(); document.body.style.overflow = ''; };
-  }, [imageUrl, lenis]);
-
-  // Esc to close
-  useEffect(() => {
-    if (!imageUrl) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [imageUrl, onClose]);
-
-  useEffect(() => { setZoom(1); setPos({ x: 0, y: 0 }); }, [imageUrl]);
-
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    const next = Math.min(Math.max(zoom + (e.deltaY > 0 ? -0.1 : 0.1), 1), 4);
-    setZoom(next);
-    if (next === 1) setPos({ x: 0, y: 0 });
-  }, [zoom]);
-
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    setDragging(true);
-    setDragStart({ x: e.clientX - pos.x, y: e.clientY - pos.y });
-  }, [pos]);
-
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return;
-    e.preventDefault();
-    setPos({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-  }, [dragging, dragStart]);
-
-  const stopDrag = useCallback(() => {
-    setDragging(false);
-    setTimeout(() => setPos({ x: 0, y: 0 }), 50);
-  }, []);
-
-  if (!mounted) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {imageUrl && (
-        <motion.div
-          key="verification-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.22 }}
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5"
-          style={{ background: 'rgba(5, 10, 24, 0.85)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        >
-          {/* Blur layer — separate so card content is never blurred on mobile */}
-          <div className="absolute inset-0 pointer-events-none" style={{ backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' }} />
-
-          <motion.div
-            key="verification-card"
-            initial={{ opacity: 0, scale: 0.93, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.93, y: 20 }}
-            transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="relative w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-4xl flex flex-col rounded-xl sm:rounded-2xl"
-            style={{
-              background: 'var(--surface-modal)',
-              border: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-modal)',
-              height: 'min(85dvh, 85vh)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Floating header */}
-            <div
-              className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 pointer-events-none"
-              style={{ background: 'linear-gradient(to bottom, var(--modal-header-bg, hsl(220 40% 6% / 0.95)) 0%, transparent 100%)' }}
-            >
-              <div className="flex items-center gap-2.5 pointer-events-auto">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'hsl(202 85% 55% / 0.15)', border: '1px solid hsl(202 85% 55% / 0.25)' }}
-                >
-                  <BadgeCheck className="w-3.5 h-3.5" style={{ color: 'hsl(202 85% 65%)' }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm font-semibold text-foreground/90 leading-tight">Verification Proof</p>
-                  <p className="text-[10px] sm:text-[11px] text-foreground/50">Certificate verification image</p>
-                </div>
-              </div>
-              <div className="pointer-events-auto">
-                <button
-                  onClick={onClose}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-muted/10"
-                  style={{ background: 'var(--modal-btn-bg)', border: '1px solid var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                >
-                  <X className="w-4 h-4 text-foreground/70" />
-                </button>
-              </div>
-            </div>
-
-            {/* Image / zoom area */}
-            <div
-              className={`relative flex-1 min-h-0 bg-[var(--surface-bg)] flex items-center justify-center overflow-hidden overscroll-contain ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-              onWheel={onWheel}
-              onMouseDown={onMouseDown}
-              onMouseMove={onMouseMove}
-              onMouseUp={stopDrag}
-              onMouseLeave={stopDrag}
-              onTouchStart={(e) => {
-                if (e.touches.length === 1) {
-                  setDragging(true);
-                  setDragStart({ x: e.touches[0].clientX - pos.x, y: e.touches[0].clientY - pos.y });
-                }
-              }}
-              onTouchMove={(e) => {
-                if (!dragging || e.touches.length !== 1) return;
-                e.preventDefault();
-                setPos({ x: e.touches[0].clientX - dragStart.x, y: e.touches[0].clientY - dragStart.y });
-              }}
-              onTouchEnd={stopDrag}
-              onDoubleClick={() => { const next = zoom > 1 ? 1 : 2; setZoom(next); if (next === 1) setPos({ x: 0, y: 0 }); }}
-            >
-              {/* Radial glow */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at center, hsl(202 85% 30% / 0.06) 0%, transparent 70%)' }} />
-
-              <div
-                className="relative w-full h-full flex items-center justify-center"
-                style={{ padding: '52px 12px 48px' }}
-                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              >
-                <img
-                  src={imageUrl}
-                  alt="Verification proof"
-                  draggable={false}
-                  className={`select-none max-w-full max-h-full object-contain shadow-2xl pointer-events-none ${dragging ? '' : 'transition-transform duration-700'}`}
-                  style={{
-                    transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`,
-                    transformOrigin: 'center center',
-                    transitionTimingFunction: dragging ? 'none' : 'cubic-bezier(0.19, 1, 0.22, 1)',
-                  }}
-                />
-              </div>
-
-              {/* Zoom controls */}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-                <button
-                  type="button"
-                  onClick={() => { const z = Math.max(zoom - 0.25, 1); setZoom(z); if (z === 1) setPos({ x: 0, y: 0 }); }}
-                  className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                  style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                  title="Zoom out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <div
-                  className="text-xs px-3 py-1.5 rounded-full border pointer-events-none min-w-[52px] text-center backdrop-blur-sm"
-                  style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                >
-                  {Math.round(zoom * 100)}%
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setZoom(Math.min(zoom + 0.25, 4))}
-                  className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                  style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                  title="Zoom in"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body
-  );
-}
-
-// Enhanced Modal
-export function CertificatesModal({
-  isOpen,
-  onOpenChange,
-  certificates,
-  selectedIndex,
-  zoomLevel,
-  setZoomLevel,
-  onVerificationImage,
-}: {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  certificates: Certificate[];
-  selectedIndex: number | null;
-  zoomLevel: number;
-  setZoomLevel: (z: number) => void;
-  onVerificationImage?: (url: string) => void;
-}) {
-  const cert = selectedIndex !== null ? certificates[selectedIndex] : null;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const lenis = useLenis();
+  useScrollLock(viewer !== null || showAll || verificationUrl !== null);
+  const { remember: rememberViewer, onCloseAutoFocus: restoreViewerFocus } = useReturnFocus();
+  const { remember: rememberAll, onCloseAutoFocus: restoreAllFocus } = useReturnFocus();
+  const { remember: rememberVerify, onCloseAutoFocus: restoreVerifyFocus } = useReturnFocus();
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-      lenis?.stop();
-    } else {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      lenis?.start();
-    }
-    return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      lenis?.start();
+    fetchCertificates();
+    const unsubscribe = subscribeToChanges();
+
+    convexClient
+      .mutation(api.analytics.track, {
+        event_type: "page_view",
+        page_url: "/certificates",
+        event_data: { section: "certificates" },
+      })
+      .catch((error: unknown) => console.warn("Analytics tracking error:", error));
+
+    return () => unsubscribe();
+  }, [fetchCertificates, subscribeToChanges]);
+
+  // Recognition first, then participation, each by admin-defined order
+  const { sortedAll, counts } = useMemo(() => {
+    const byOrder = (a: Certificate, b: Certificate) => a.order_index - b.order_index;
+    const recognition = certificates.filter((c) => kindOf(c) === "recognition").sort(byOrder);
+    const participation = certificates.filter((c) => kindOf(c) === "participation").sort(byOrder);
+    return {
+      sortedAll: [...recognition, ...participation],
+      counts: { all: certificates.length, recognition: recognition.length, participation: participation.length },
     };
-  }, [isOpen, lenis]);
+  }, [certificates]);
 
-  useEffect(() => {
-    if (!isOpen || zoomLevel === 1) {
-      setPosition({ x: 0, y: 0 });
-    }
-  }, [isOpen, zoomLevel, cert]);
+  const filtered = useMemo(
+    () => (activeFilter === "all" ? sortedAll : sortedAll.filter((c) => kindOf(c) === activeFilter)),
+    [sortedAll, activeFilter]
+  );
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.min(Math.max(zoomLevel + delta, 1), 4);
-    setZoomLevel(newZoom);
-    if (newZoom === 1) setPosition({ x: 0, y: 0 });
-  }, [zoomLevel, setZoomLevel]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    });
-  }, [position]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    setPosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  }, [isDragging, dragStart]);
-
-  const stopDragging = useCallback(() => {
-    setIsDragging(false);
-    // Magnet effect: Snap back to center
-    setTimeout(() => {
-      setPosition({ x: 0, y: 0 });
-    }, 50); // Small delay for feel
+  const syncEdges = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const start = el.scrollLeft <= 4;
+    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+    setEdges((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
   }, []);
 
-  if (!cert) return null;
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    syncEdges();
+    const observer = new ResizeObserver(syncEdges);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [syncEdges, activeFilter, loading, certificates.length]);
 
-  return (
-    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-[1000px] p-0 overflow-hidden rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-cyan-500/20 bg-[var(--surface-modal)] border-none">
+  // Fade the cards out where more are waiting, so the peeking card reads as "scroll for more"
+  const edgeFade = `linear-gradient(to right, ${edges.start ? "black 0" : "transparent 0, black 1rem"}, ${
+    edges.end ? "black 100%" : "black calc(100% - 3rem), transparent 100%"
+  })`;
 
-        {/* Header - Transparent and Minimal */}
-        <AlertDialogHeader className="absolute top-0 left-0 right-0 z-50 p-4 bg-gradient-to-b from-[var(--modal-header-bg)] to-transparent pointer-events-none">
-          <div className="flex items-start justify-between gap-4 pointer-events-auto">
-            {/* Title with consistent typography */}
-            <AlertDialogTitle className="text-base md:text-lg font-bold text-foreground/90 tracking-tight drop-shadow-md line-clamp-1 mt-1">
-              {cert.title}
-            </AlertDialogTitle>
+  const scrollByPage = (direction: 1 | -1) => {
+    const el = scrollerRef.current;
+    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.9, behavior: "smooth" });
+  };
 
-            {/* Action Buttons - Premium styling */}
-            <div className="flex items-center gap-2">
-              <AlertDialogCancel asChild>
-                <button
-                  className="p-2 rounded-full transition-all duration-300 backdrop-blur-sm hover:bg-muted/10 border"
-                  style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                  title="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </AlertDialogCancel>
-            </div>
-          </div>
-        </AlertDialogHeader>
+  const openViewer = useCallback(
+    (list: Certificate[], index: number) => {
+      rememberViewer();
+      setViewer({ list, index });
+    },
+    [rememberViewer]
+  );
 
-        {/* Content Container */}
-        <div className="flex flex-col h-[85vh] md:h-[80vh]">
-          {/* Image Area - Dark neutral background */}
-          <div
-            ref={containerRef}
-            className={`relative flex-1 bg-[var(--surface-bg)] flex items-center justify-center group overflow-hidden overscroll-contain ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-            onWheel={handleWheel}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={stopDragging}
-            onMouseLeave={stopDragging}
-            onDoubleClick={() => setZoomLevel(zoomLevel > 1 ? 1 : 2)}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/10 to-transparent opacity-50 pointer-events-none" />
+  const openVerification = useCallback(
+    (url: string) => {
+      rememberVerify();
+      setVerificationUrl(url);
+    },
+    [rememberVerify]
+  );
 
-            {cert.image_url ? (
-              <div
-                className="relative w-full h-full flex items-center justify-center"
-                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              >
-                <OptimizedImage
-                  src={cert.image_url}
-                  alt={`${cert.title} certificate`}
-                  className={`select-none shadow-2xl pointer-events-none w-full h-full object-contain ${isDragging ? '' : 'transition-transform duration-700'}`}
-                  style={{
-                    transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
-                    transformOrigin: 'center center',
-                    transitionTimingFunction: isDragging ? 'none' : 'cubic-bezier(0.19, 1, 0.22, 1)'
-                  }}
-                  draggable={false}
-                  fallbackIcon={<Award className="h-20 w-20 text-muted-foreground/30" />}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 text-muted-foreground/30">
-                <Award className="h-20 w-20" />
-                <span className="text-sm font-medium">No Image Available</span>
-              </div>
-            )}
+  const navigateViewer = useCallback(
+    (delta: number) =>
+      setViewer((v) => (v ? { ...v, index: clamp(v.index + delta, 0, v.list.length - 1) } : v)),
+    []
+  );
 
-            {/* Zoom controls */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-              <button
-                type="button"
-                onClick={() => { const z = Math.max(zoomLevel - 0.25, 1); setZoomLevel(z); if (z === 1) setPosition({ x: 0, y: 0 }); }}
-                className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                title="Zoom out"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              <div
-                className="text-xs px-3 py-1.5 rounded-full border pointer-events-none min-w-[52px] text-center backdrop-blur-sm"
-                style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-              >
-                {Math.round(zoomLevel * 100)}%
-              </div>
-              <button
-                type="button"
-                onClick={() => setZoomLevel(Math.min(zoomLevel + 0.25, 4))}
-                className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                title="Zoom in"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+  const closeViewer = useCallback(() => setViewer(null), []);
+  const closeVerification = useCallback(() => setVerificationUrl(null), []);
 
-          {/* Footer - Glassmorphism details panel */}
-          <div className="shrink-0 bg-background border-t border-border/10 px-6 py-5 md:px-8 md:py-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                <div className="flex items-center gap-2 text-foreground/90 font-medium">
-                  <Building2 className="h-4 w-4 text-cyan-400" />
-                  {cert.issuer}
-                </div>
+  const heading = (
+    <div className="mx-auto mb-12 flex w-fit flex-col items-center sm:mb-14">
+      <h2 className="mb-4 text-center text-4xl font-bold md:text-5xl">
+        <span className="text-cyan-400">Certificates & Achievements</span>
+      </h2>
+      <p className="mx-auto max-w-2xl text-center text-lg font-medium text-muted-foreground">
+        Professional certifications that validate my technical expertise
+      </p>
+    </div>
+  );
 
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-4 w-4 text-cyan-400/70" />
-                  {new Date(cert.issue_date).toLocaleDateString('en-US', {
-                    month: 'long',
-                    year: 'numeric'
-                  })}
-                </div>
-
-                {cert.credential_id && (
-                  <div className="flex items-center gap-2 text-muted-foreground font-mono text-xs bg-muted/5 px-2 py-0.5 rounded border border-border/10">
-                    <BadgeCheck className="h-3.5 w-3.5 text-cyan-400/50" />
-                    ID: {cert.credential_id}
-                  </div>
-                )}
-              </div>
-
-              {cert.description && (
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">
-                  {cert.description}
-                </p>
-              )}
+  if (loading) {
+    return (
+      <section id="certificates" className="relative overflow-hidden py-24">
+        <div className="container relative z-10 px-4 md:px-6">
+          <div className="mx-auto max-w-6xl">
+            {heading}
+            <Skeleton className="mb-8 h-9 w-72" />
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <CardSkeleton key={i} />
+              ))}
             </div>
           </div>
         </div>
-      </AlertDialogContent>
-    </AlertDialog>
+      </section>
+    );
+  }
+
+  return (
+    <section id="certificates" className="relative overflow-hidden py-24">
+      <div className="container relative z-10 px-4 md:px-6">
+        <div className="mx-auto max-w-6xl">
+          <motion.div {...reveal}>{heading}</motion.div>
+
+          {certificates.length === 0 ? (
+            <div className="py-16 text-center">
+              <Award className="mx-auto h-8 w-8 text-muted-foreground/40" strokeWidth={1.5} />
+              <p className="mt-3 text-sm text-muted-foreground">Certificates will appear here once they're added.</p>
+            </div>
+          ) : (
+            <motion.div {...reveal}>
+              {/* Filters + carousel controls */}
+              <div className="flex items-center justify-between gap-4">
+                <div role="tablist" aria-label="Filter certificates" className="scrollbar-hide -mx-3 flex items-center overflow-x-auto px-1">
+                  {FILTERS.map(({ key, label }) => {
+                    const active = activeFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setActiveFilter(key)}
+                        className={cn(
+                          "relative whitespace-nowrap px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:text-foreground",
+                          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {label}
+                        <span className="ml-1.5 text-xs tabular-nums text-muted-foreground/70">{counts[key]}</span>
+                        {active && (
+                          <motion.span layoutId="certificate-filter" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden items-center gap-1 sm:flex">
+                  <button type="button" aria-label="Scroll left" disabled={edges.start} onClick={() => scrollByPage(-1)} className={iconButton}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button type="button" aria-label="Scroll right" disabled={edges.end} onClick={() => scrollByPage(1)} className={iconButton}>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Native scroll-snap carousel: swipe on touch, trackpad, or arrows */}
+              <motion.div
+                key={activeFilter}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.25 }}
+                className="mt-6"
+              >
+                <div
+                  ref={scrollerRef}
+                  onScroll={syncEdges}
+                  className="scrollbar-hide -mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-pl-[3.75rem] px-4 pb-1 sm:scroll-pl-16 md:-mx-6 md:px-6 lg:scroll-pl-[4.5rem]"
+                  style={{ maskImage: edgeFade, WebkitMaskImage: edgeFade }}
+                >
+                  {filtered.map((cert, index) => (
+                    <div
+                      key={cert.id}
+                      className="w-[72%] shrink-0 snap-start sm:w-[calc((100%-2.5rem)/2.3)] lg:w-[calc((100%-3.75rem)/3.25)]"
+                    >
+                      <CertificateCard
+                        cert={cert}
+                        onOpen={() => openViewer(filtered, index)}
+                        onVerifyImage={openVerification}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
+              <div className="mt-10 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    rememberAll();
+                    setShowAll(true);
+                  }}
+                  className="group inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-foreground"
+                >
+                  View all {counts.all} certificates
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      <AllCertificatesDialog
+        open={showAll}
+        onOpenChange={setShowAll}
+        certificates={sortedAll}
+        onSelect={(index) => openViewer(sortedAll, index)}
+        onCloseAutoFocus={restoreAllFocus}
+      />
+      <CertificateViewer
+        viewer={viewer}
+        onClose={closeViewer}
+        onNavigate={navigateViewer}
+        onVerifyImage={openVerification}
+        keysEnabled={verificationUrl === null}
+        onCloseAutoFocus={restoreViewerFocus}
+      />
+      <VerificationViewer url={verificationUrl} onClose={closeVerification} onCloseAutoFocus={restoreVerifyFocus} />
+    </section>
   );
 }

@@ -225,3 +225,22 @@
     background-size: 380px 1500px;
   }
 }
+
+/* ── Adaptive performance tiers (set on <html data-perf> by usePerformanceStore) ── */
+
+/* Medium: keep the nebulas but stop animating them, so their blur is rasterized once */
+html[data-perf="medium"] .nebula-glow {
+  animation: none;
+  will-change: auto;
+}
+
+/* Low: drop the blurred nebulas entirely and keep the starfield as plain static paint */
+html[data-perf="low"] .nebula-wrapper {
+  display: none;
+}
+
+html[data-perf="low"] .stars-layer {
+  will-change: auto;
+  transform: none;
+  animation: none;
+}

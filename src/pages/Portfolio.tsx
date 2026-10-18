@@ -11,6 +11,7 @@ import { ContactSection } from "@/components/sections/contact-section-dynamic";
 import { Footer } from "@/components/sections/footer";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
+import { useMotionBudget } from "@/stores/usePerformanceStore";
 import "@/styles/galaxy-background.css";
 
 
@@ -18,6 +19,8 @@ const Portfolio = () => {
   const galaxyRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
+  // Low tier / reduced motion: static starfield, no scroll-linked transforms
+  const { parallax } = useMotionBudget();
 
   // Detect mobile/tablet for performance optimization
   useEffect(() => {
@@ -57,21 +60,21 @@ const Portfolio = () => {
             {/* Layer 1 - Slow parallax stars */}
             <motion.div
               className="stars-layer stars-layer-1"
-              style={{ y: starsLayer1Y, willChange: 'transform' }}
+              style={parallax ? { y: starsLayer1Y, willChange: 'transform' } : undefined}
             />
             {/* Layer 2 - Medium parallax stars */}
             <motion.div
               className="stars-layer stars-layer-2"
-              style={{ y: starsLayer2Y, willChange: 'transform' }}
+              style={parallax ? { y: starsLayer2Y, willChange: 'transform' } : undefined}
             />
             {/* Layer 3 - Fast parallax stars with twinkle */}
             <motion.div
               className="stars-layer stars-layer-3"
-              style={{ y: starsLayer3Y, willChange: 'transform' }}
+              style={parallax ? { y: starsLayer3Y, willChange: 'transform' } : undefined}
             />
 
             {/* Nebula glow effects - scroll-based parallax */}
-            <motion.div style={{ y: nebulaY, willChange: 'transform' }}>
+            <motion.div className="nebula-wrapper" style={parallax ? { y: nebulaY, willChange: 'transform' } : undefined}>
               <div className="nebula-glow nebula-1" />
               <div className="nebula-glow nebula-2" />
               <div className="nebula-glow nebula-3" />

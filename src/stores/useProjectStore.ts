@@ -7,6 +7,7 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  year?: string;
   image_url?: string;
   live_url?: string;
   github_url?: string;

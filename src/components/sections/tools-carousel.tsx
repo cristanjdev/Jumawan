@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { motion, useScroll, useTransform, useSpring, MotionValue, useMotionValue, useAnimationFrame, useMotionTemplate } from "framer-motion";
+import { motion, useScroll, useTransform, useSpring, MotionValue, useMotionValue, useAnimationFrame, useMotionTemplate, useInView } from "framer-motion";
 import { useQuery } from "convex/react";
 import { api } from '../../../convex/_generated/api';
+import { useMotionBudget } from "@/stores/usePerformanceStore";
 
 // --- Types ---
 interface DisplayTool {
@@ -11,11 +12,25 @@ interface DisplayTool {
   image: string;
 }
 
+// --- Pauses looping work while the tab is in the background ---
+function usePageVisible() {
+  const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
+
+  useEffect(() => {
+    const onChange = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onChange);
+    return () => document.removeEventListener('visibilitychange', onChange);
+  }, []);
+
+  return visible;
+}
+
 // --- Shared scroll velocity tracker for mobile marquee ---
-function useScrollVelocity() {
+function useScrollVelocity(active: boolean) {
   const velocity = useRef(0);
 
   useEffect(() => {
+    if (!active) return;
     let rafId: number;
     let prevY = window.scrollY;
     let prevTime = performance.now();
@@ -40,17 +55,24 @@ function useScrollVelocity() {
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, []);
+  }, [active]);
 
   return velocity;
 }
 
 // --- Marquee Row driven by requestAnimationFrame with scroll-responsive speed ---
-const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity }: { 
+// Each logo slot is 2.75rem wide + 1.25rem margin per side = 84px
+const MARQUEE_SLOT_PX = 84;
+// The marquee only renders below the lg breakpoint
+const MARQUEE_MAX_VIEWPORT_PX = 1024;
+
+const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity, active }: { 
   tools: DisplayTool[]; 
   reverse?: boolean;
   baseSpeed?: number;
   scrollVelocity: React.MutableRefObject<number>;
+  /** false while offscreen or the tab is hidden — stops the rAF loop */
+  active: boolean;
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const setARef = useRef<HTMLDivElement>(null);
@@ -59,8 +81,13 @@ const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity }: 
   const initializedRef = useRef(false);
   const smoothSpeedRef = useRef(baseSpeed);
   
-  const repeatCount = tools.length > 0 ? Math.max(8, Math.ceil(80 / tools.length)) : 0;
-  const oneSet = tools.length > 0 ? Array(repeatCount).fill(tools).flat() : [];
+  // One set only needs to span the widest viewport the marquee shows on; the three
+  // copies below handle the seamless wrap. (Was a fixed 8+ repeats → ~1,500 <img>.)
+  const repeatCount = tools.length > 0 ? Math.max(1, Math.ceil(MARQUEE_MAX_VIEWPORT_PX / (tools.length * MARQUEE_SLOT_PX))) : 0;
+  const oneSet = useMemo(
+    () => (repeatCount > 0 ? Array(repeatCount).fill(tools).flat() : []),
+    [tools, repeatCount]
+  );
 
   // Measure width of one set
   useEffect(() => {
@@ -85,7 +112,7 @@ const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity }: 
 
   // Animation loop — single smooth pipeline
   useEffect(() => {
-    if (tools.length === 0) return;
+    if (tools.length === 0 || !active) return;
     let rafId: number;
     let lastTime = 0;
 
@@ -128,7 +155,7 @@ const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity }: 
 
     rafId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafId);
-  }, [tools.length, baseSpeed, reverse, scrollVelocity]);
+  }, [tools.length, baseSpeed, reverse, scrollVelocity, active]);
 
   if (tools.length === 0) return null;
 
@@ -153,7 +180,7 @@ const MarqueeRow = ({ tools, reverse = false, baseSpeed = 40, scrollVelocity }: 
                 className="flex-shrink-0 flex items-center justify-center"
                 style={{ width: '2.75rem', height: '2.75rem', margin: '0 1.25rem' }}
               >
-                <img src={tool.image} alt={tool.name} className="w-full h-full object-contain opacity-70" draggable={false} />
+                <img src={tool.image} alt={setIdx === 0 ? tool.name : ""} className="w-full h-full object-contain opacity-70" draggable={false} decoding="async" />
               </div>
             ))}
           </div>
@@ -173,7 +200,12 @@ const MobileToolsLayout = ({
   middleRing: DisplayTool[];
   outerRing: DisplayTool[];
 }) => {
-  const scrollVelocity = useScrollVelocity();
+  const { ambient } = useMotionBudget();
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(layoutRef, { margin: "100px 0px" });
+  const pageVisible = usePageVisible();
+  const active = inView && pageVisible;
+  const scrollVelocity = useScrollVelocity(active);
   const allTools = [...innerRing, ...middleRing, ...outerRing];
   
   // Fisher-Yates shuffle with a seed so it's stable per mount but random per row
@@ -194,6 +226,7 @@ const MobileToolsLayout = ({
 
   return (
     <motion.div 
+      ref={layoutRef}
       className="w-full relative"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -205,9 +238,9 @@ const MobileToolsLayout = ({
         animate={{ opacity: 1 }}
         transition={{ duration: 1.2, delay: 0.3 }}
       >
-        <MarqueeRow tools={line1} baseSpeed={44} scrollVelocity={scrollVelocity} />
-        <MarqueeRow tools={line2} reverse baseSpeed={28} scrollVelocity={scrollVelocity} />
-        <MarqueeRow tools={line3} baseSpeed={50} scrollVelocity={scrollVelocity} />
+        <MarqueeRow tools={line1} baseSpeed={44} scrollVelocity={scrollVelocity} active={active} />
+        <MarqueeRow tools={line2} reverse baseSpeed={28} scrollVelocity={scrollVelocity} active={active} />
+        <MarqueeRow tools={line3} baseSpeed={50} scrollVelocity={scrollVelocity} active={active} />
       </motion.div>
 
       {/* Central Logo In Front */}
@@ -218,11 +251,11 @@ const MobileToolsLayout = ({
         transition={{ duration: 0.75, delay: 0.45 }}
       >
         <motion.img
-          src="/blutech.png"
+          src="/blutech.webp"
           alt="Tech Core"
           className="w-[10rem] h-[10rem] sm:w-40 sm:h-40 md:w-48 md:h-48 object-contain"
-          animate={{ scale: [1, 1.05, 1] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          animate={ambient && active ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+          transition={ambient && active ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.6, ease: "easeOut" }}
         />
       </motion.div>
     </motion.div>
@@ -231,7 +264,7 @@ const MobileToolsLayout = ({
 
 // --- Desktop Solar System Component ---
 // Laser Beam Component
-const LaserBeam = () => {
+const LaserBeam = ({ pulse }: { pulse: boolean }) => {
   return (
     <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
       <defs>
@@ -240,13 +273,6 @@ const LaserBeam = () => {
           <stop offset="20%" stopColor="var(--laser-mid, rgba(56, 189, 248, 0.3))" />
           <stop offset="100%" stopColor="var(--laser-tip, rgba(34, 211, 238, 0.9))" />
         </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
       </defs>
       <line
         x1="50%" y1="50%"
@@ -254,49 +280,42 @@ const LaserBeam = () => {
         stroke="url(#laserGradient)"
         strokeWidth="1"
         strokeDasharray="4 4"
-        className="animate-pulse"
+        className={pulse ? "animate-pulse" : undefined}
       />
     </svg>
   );
 };
 
-// A single planet node that sits on an orbit
+// A single planet sitting at a fixed slot angle inside its (rotating) orbit ring
 const PlanetNode = ({
   tool,
-  baseDiameterClasses,
-  baseAngle,
-  rotationValue,
+  angle,
+  ringCounterRotate,
+  pulseLaser,
 }: {
   tool: DisplayTool;
-  baseDiameterClasses: string;
-  baseAngle: number;
-  rotationValue: MotionValue<number>;
+  angle: number;
+  ringCounterRotate: MotionValue<number>;
+  pulseLaser: boolean;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const rotate = useTransform(rotationValue, (r) => r + baseAngle);
-  const counterRotate = useTransform(rotate, (r) => -r);
+  // Cancel both the ring's rotation and this slot's angle so the logo stays upright
+  const iconRotate = useTransform(ringCounterRotate, (r) => r - angle);
 
   return (
-    <motion.div
-      className={`absolute top-1/2 left-1/2 pointer-events-none rounded-full ${baseDiameterClasses}`}
-      style={{
-        x: "-50%",
-        y: "-50%",
-        rotate: rotate,
-      }}
-    >
+    <div className="absolute inset-0" style={{ transform: `rotate(${angle}deg)` }}>
       <div className="absolute inset-0 opacity-30">
-        <LaserBeam />
+        <LaserBeam pulse={pulseLaser} />
       </div>
       <div
         className="absolute top-0 left-1/2 z-10"
-        style={{ 
+        style={{
           transform: "translate(-50%, -50%)",
-          transformOrigin: "50% 50%" 
+          transformOrigin: "50% 50%"
         }}
       >
         <motion.div
-          style={{ rotate: counterRotate }}
+          style={{ rotate: iconRotate, willChange: "transform" }}
           className="relative group pointer-events-auto"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
@@ -307,6 +326,7 @@ const PlanetNode = ({
                 src={tool.image}
                 alt={tool.name}
                 className="w-full h-full object-contain drop-shadow-lg"
+                decoding="async"
               />
             </div>
           </div>
@@ -321,6 +341,44 @@ const PlanetNode = ({
           </div>
         </motion.div>
       </div>
+    </div>
+  );
+};
+
+// One orbit: the whole ring rotates as a single composited layer instead of
+// every planet transforming (and repainting) its own 720px-wide box each frame.
+const OrbitRing = ({
+  tools,
+  diameterClasses,
+  rotation,
+  pulseLasers,
+}: {
+  tools: DisplayTool[];
+  diameterClasses: string;
+  rotation: MotionValue<number>;
+  pulseLasers: boolean;
+}) => {
+  const counterRotate = useTransform(rotation, (r) => -r);
+
+  return (
+    <motion.div
+      className={`absolute top-1/2 left-1/2 pointer-events-none rounded-full ${diameterClasses}`}
+      style={{
+        x: "-50%",
+        y: "-50%",
+        rotate: rotation,
+        willChange: "transform",
+      }}
+    >
+      {tools.map((tool, i) => (
+        <PlanetNode
+          key={tool.name}
+          tool={tool}
+          angle={(360 / tools.length) * i}
+          ringCounterRotate={counterRotate}
+          pulseLaser={pulseLasers}
+        />
+      ))}
     </motion.div>
   );
 };
@@ -336,6 +394,14 @@ const DesktopSolarSystem = ({
   outerRing: DisplayTool[];
   containerRef: React.RefObject<HTMLElement>;
 }) => {
+  const { tier, ambient, rich } = useMotionBudget();
+  const inView = useInView(containerRef, { margin: "200px 0px" });
+  const pageVisible = usePageVisible();
+  const active = inView && pageVisible;
+  const loop = ambient && active;
+  const loopRef = useRef(loop);
+  loopRef.current = loop;
+
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start end", "end start"],
@@ -352,6 +418,8 @@ const DesktopSolarSystem = ({
   const speedFactor = useRef(1);
 
   useAnimationFrame((_, delta) => {
+    // Idle drift only while visible; scroll-linked rotation still works on every tier
+    if (!loopRef.current) return;
     if (speedFactor.current > 1) {
       speedFactor.current = Math.max(1, speedFactor.current * 0.95);
     }
@@ -378,6 +446,9 @@ const DesktopSolarSystem = ({
 
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const spotlightMask = useMotionTemplate`radial-gradient(200px circle at ${mouseX}px ${mouseY}px, black, transparent)`;
+  // The cursor spotlight repaints the orbit lines on every mouse move — skipped on the low tier
+  const spotlight = tier !== "low";
 
   function handleMouseMove({ currentTarget, clientX, clientY }: React.MouseEvent) {
     const { left, top } = currentTarget.getBoundingClientRect();
@@ -398,14 +469,15 @@ const DesktopSolarSystem = ({
 
   return (
     <motion.div
-      onMouseMove={handleMouseMove}
-      animate={{ y: [-10, 10] }}
-      transition={{
+      onMouseMove={spotlight ? handleMouseMove : undefined}
+      // Animating back to 0 (instead of dropping `animate`) is what actually stops a framer loop
+      animate={loop ? { y: [-10, 10] } : { y: 0 }}
+      transition={loop ? {
         duration: 3,
         repeat: Infinity,
         repeatType: "reverse",
         ease: "easeInOut"
-      }}
+      } : { duration: 0.6, ease: "easeOut" }}
       style={{ willChange: 'transform' }}
       className="relative group w-[240px] h-[240px] sm:w-[400px] sm:h-[400px] md:w-[560px] md:h-[560px] flex items-center justify-center perspective-1000"
     >
@@ -415,15 +487,15 @@ const DesktopSolarSystem = ({
         onClick={triggerPulse}
       >
         <motion.img
-          src="/blutech.png"
+          src="/blutech.webp"
           alt="Tech Core"
           className="w-full h-full object-contain z-10"
-          animate={{ scale: [1, 1.05, 1] }}
-          transition={{
+          animate={loop ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+          transition={loop ? {
             duration: 4,
             repeat: Infinity,
             ease: "easeInOut"
-          }}
+          } : { duration: 0.6, ease: "easeOut" }}
         />
         {pulses.map((id) => (
           <motion.div
@@ -454,50 +526,43 @@ const DesktopSolarSystem = ({
         <div className="absolute rounded-full border border-blue-500/10 w-[360px] h-[360px] sm:w-[540px] sm:h-[540px] md:w-[720px] md:h-[720px]" />
       </div>
 
+      {spotlight && (
       <motion.div
         className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
         style={{
-          maskImage: useMotionTemplate`radial-gradient(200px circle at ${mouseX}px ${mouseY}px, black, transparent)`,
-          WebkitMaskImage: useMotionTemplate`radial-gradient(200px circle at ${mouseX}px ${mouseY}px, black, transparent)`,
+          maskImage: spotlightMask,
+          WebkitMaskImage: spotlightMask,
         }}
       >
         <div className="absolute rounded-full border border-cyan-400/60 w-[160px] h-[160px] sm:w-[240px] sm:h-[240px] md:w-[320px] md:h-[320px]" />
         <div className="absolute rounded-full border border-cyan-400/60 w-[260px] h-[260px] sm:w-[390px] sm:h-[390px] md:w-[520px] md:h-[520px]" />
         <div className="absolute rounded-full border border-cyan-400/60 w-[360px] h-[360px] sm:w-[540px] sm:h-[540px] md:w-[720px] md:h-[720px]" />
       </motion.div>
+      )}
 
-      <div className="absolute inset-0 origin-center pointer-events-none" style={{ willChange: 'transform' }}>
+      <div className="absolute inset-0 origin-center pointer-events-none">
         <div className="absolute inset-0 pointer-events-auto z-30">
           {/* Inner Ring */}
-          {innerRing.map((tool, i) => (
-            <PlanetNode
-              key={tool.name}
-              tool={tool}
-              baseDiameterClasses="w-[160px] h-[160px] sm:w-[240px] sm:h-[240px] md:w-[320px] md:h-[320px]"
-              baseAngle={(360 / innerRing.length) * i}
-              rotationValue={innerRotate}
-            />
-          ))}
+          <OrbitRing
+            tools={innerRing}
+            diameterClasses="w-[160px] h-[160px] sm:w-[240px] sm:h-[240px] md:w-[320px] md:h-[320px]"
+            rotation={innerRotate}
+            pulseLasers={rich}
+          />
           {/* Middle Ring */}
-          {middleRing.map((tool, i) => (
-            <PlanetNode
-              key={tool.name}
-              tool={tool}
-              baseDiameterClasses="w-[260px] h-[260px] sm:w-[390px] sm:h-[390px] md:w-[520px] md:h-[520px]"
-              baseAngle={(360 / middleRing.length) * i}
-              rotationValue={middleRotate}
-            />
-          ))}
+          <OrbitRing
+            tools={middleRing}
+            diameterClasses="w-[260px] h-[260px] sm:w-[390px] sm:h-[390px] md:w-[520px] md:h-[520px]"
+            rotation={middleRotate}
+            pulseLasers={rich}
+          />
           {/* Outer Ring */}
-          {outerRing.map((tool, i) => (
-            <PlanetNode
-              key={tool.name}
-              tool={tool}
-              baseDiameterClasses="w-[360px] h-[360px] sm:w-[540px] sm:h-[540px] md:w-[720px] md:h-[720px]"
-              baseAngle={(360 / outerRing.length) * i}
-              rotationValue={outerRotate}
-            />
-          ))}
+          <OrbitRing
+            tools={outerRing}
+            diameterClasses="w-[360px] h-[360px] sm:w-[540px] sm:h-[540px] md:w-[720px] md:h-[720px]"
+            rotation={outerRotate}
+            pulseLasers={rich}
+          />
         </div>
       </div>
     </motion.div>
@@ -580,31 +645,28 @@ export function ToolsCarousel() {
         </motion.div>
 
         <motion.div 
-          className={isMobile ? "block" : "hidden"}
+          key={isMobile ? "mobile" : "desktop"}
+          className={isMobile ? "w-full" : undefined}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 1.2, delay: 0.3 }}
         >
-          <MobileToolsLayout 
-            innerRing={innerRing}
-            middleRing={middleRing}
-            outerRing={outerRing}
-          />
-        </motion.div>
-        <motion.div 
-          className={isMobile ? "hidden" : "block"}
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.2, delay: 0.3 }}
-        >
-          <DesktopSolarSystem
-            innerRing={innerRing}
-            middleRing={middleRing}
-            outerRing={outerRing}
-            containerRef={containerRef}
-          />
+          {/* Only the active layout is mounted, so the hidden one costs nothing */}
+          {isMobile ? (
+            <MobileToolsLayout
+              innerRing={innerRing}
+              middleRing={middleRing}
+              outerRing={outerRing}
+            />
+          ) : (
+            <DesktopSolarSystem
+              innerRing={innerRing}
+              middleRing={middleRing}
+              outerRing={outerRing}
+              containerRef={containerRef}
+            />
+          )}
         </motion.div>
       </motion.div>
     </section>

@@ -70,9 +70,9 @@ export function ProjectCard({ project, index, openModalAt }: ProjectCardProps) {
                         </h3>
 
                         <div className="flex items-center gap-2 text-sm text-muted-foreground/80 mb-4">
-                            {project._creationTime && (
+                            {project.year && (
                                 <span className="whitespace-nowrap">
-                                    {new Date(project._creationTime).getFullYear()}
+                                    {project.year}
                                 </span>
                             )}
                         </div>
