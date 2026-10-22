@@ -8,6 +8,11 @@ import { useMotionBudget } from "@/stores/usePerformanceStore";
 import { usePageVisible } from "@/hooks/use-page-visible";
 import { ToolsOrbit3D } from "./tools-orbit-3d";
 
+// "Next.js", "NextJS" and "next js" are the same technology
+const toolKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/js$/, "");
+// The orbit shows only the technologies used most across the projects
+const MAX_ORBIT_TOOLS = 24;
+
 // --- Types ---
 interface DisplayTool {
   name: string;
@@ -562,11 +567,12 @@ const DesktopSolarSystem = ({
 export function ToolsCarousel() {
   const containerRef = useRef<HTMLElement>(null);
   
-  // Reactive query — auto-updates when tools are added/removed/toggled in admin
+  // Reactive queries — auto-update when tools or projects change in admin
   const data = useQuery(api.tools.listActive);
+  const projects = useQuery(api.projects.list);
 
   const { innerRing, middleRing, outerRing } = useMemo(() => {
-    if (!data || data.length === 0) return { innerRing: [], middleRing: [], outerRing: [] };
+    if (!data || data.length === 0 || projects === undefined) return { innerRing: [], middleRing: [], outerRing: [] };
 
     const uniqueToolsMap = new Map<string, DisplayTool>();
     data.forEach((t) => {
@@ -576,16 +582,30 @@ export function ToolsCarousel() {
     });
     const allTools = Array.from(uniqueToolsMap.values());
 
-    const total = allTools.length;
+    // Only the most used technologies: ranked by how many projects use them (ties keep the tools order).
+    // With no project data the full list is shown instead of an empty orbit.
+    const usage = new Map<string, number>();
+    projects.forEach((project) => {
+      new Set(project.technologies.map(toolKey)).forEach((k) => usage.set(k, (usage.get(k) ?? 0) + 1));
+    });
+    const ranked = allTools
+      .map((tool, order) => ({ tool, order, count: usage.get(toolKey(tool.name)) ?? 0 }))
+      .filter((entry) => entry.count > 0)
+      .sort((a, b) => b.count - a.count || a.order - b.order)
+      .slice(0, MAX_ORBIT_TOOLS)
+      .map((entry) => entry.tool);
+    const shown = ranked.length > 0 ? ranked : allTools;
+
+    const total = shown.length;
     const innerCount = Math.max(3, Math.floor(total * 0.2));
     const middleCount = Math.max(5, Math.floor(total * 0.35));
 
     return {
-      innerRing: allTools.slice(0, innerCount),
-      middleRing: allTools.slice(innerCount, innerCount + middleCount),
-      outerRing: allTools.slice(innerCount + middleCount),
+      innerRing: shown.slice(0, innerCount),
+      middleRing: shown.slice(innerCount, innerCount + middleCount),
+      outerRing: shown.slice(innerCount + middleCount),
     };
-  }, [data]);
+  }, [data, projects]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -603,10 +623,11 @@ export function ToolsCarousel() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Desktop gets the 3D orbit unless the device is on the low performance tier or WebGL fails
+  // Every screen size gets the 3D orbit (it lays itself out for narrow screens) unless the device is on
+  // the low performance tier or WebGL fails; then phones get the marquee and desktops the 2D orbit
   const { tier, reduceMotion } = useMotionBudget();
   const [webglFailed, setWebglFailed] = useState(false);
-  const use3D = !isMobile && tier !== "low" && !webglFailed;
+  const use3D = tier !== "low" && !webglFailed;
   const rings = useMemo(() => [innerRing, middleRing, outerRing], [innerRing, middleRing, outerRing]);
 
   return (
@@ -640,7 +661,7 @@ export function ToolsCarousel() {
         </motion.div>
 
         <motion.div 
-          key={isMobile ? "mobile" : "desktop"}
+          key={use3D ? "orbit-3d" : isMobile ? "mobile" : "desktop"}
           className={isMobile || use3D ? "w-full" : undefined}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
@@ -648,19 +669,19 @@ export function ToolsCarousel() {
           transition={{ duration: 1.2, delay: 0.3 }}
         >
           {/* Only the active layout is mounted, so the hidden one costs nothing */}
-          {isMobile ? (
+          {use3D ? (
+            <ToolsOrbit3D
+              rings={rings}
+              quality={tier === "high" && !isMobile ? "high" : "medium"}
+              reduceMotion={reduceMotion}
+              sectionRef={containerRef}
+              onUnavailable={() => setWebglFailed(true)}
+            />
+          ) : isMobile ? (
             <MobileToolsLayout
               innerRing={innerRing}
               middleRing={middleRing}
               outerRing={outerRing}
-            />
-          ) : use3D ? (
-            <ToolsOrbit3D
-              rings={rings}
-              quality={tier === "high" ? "high" : "medium"}
-              reduceMotion={reduceMotion}
-              sectionRef={containerRef}
-              onUnavailable={() => setWebglFailed(true)}
             />
           ) : (
             <DesktopSolarSystem

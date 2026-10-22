@@ -56,7 +56,10 @@ const Portfolio = () => {
         {/* Unified Space/Galaxy Background for all sections */}
         <div ref={galaxyRef} className="relative bg-[var(--surface-bg)] -mt-px" style={{ contain: 'paint' }}>
           {/* Scroll-based Animated Stars layers */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {/* The stars and nebula fade in over the top of the section, so they don't start with a hard edge under the hero */}
+          <div
+            className="absolute inset-0 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_bottom,transparent_0,#000_clamp(160px,28vh,320px))] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0,#000_clamp(160px,28vh,320px))]"
+          >
             {/* Layer 1 - Slow parallax stars */}
             <motion.div
               className="stars-layer stars-layer-1"

@@ -55,7 +55,7 @@ export function SkillsSection() {
               </span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
-              A comprehensive overview of my technical expertise and proficiency
+              A comprehensive overview of my technical expertise, and how I build with AI
             </p>
           </motion.div>
 

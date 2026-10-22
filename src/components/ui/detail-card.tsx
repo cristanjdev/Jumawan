@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ImageIcon } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DialogBar } from "@/components/ui/dialog-bar";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
+import { ViewDetailsHint } from "@/components/ui/view-details-hint";
 import { dialogShell } from "@/lib/section-ui";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +74,8 @@ export function DetailCard({
   details,
   tags,
   tagsLabel,
+  media,
+  icons,
   onOpen,
 }: {
   period: ReactNode;
@@ -81,57 +85,98 @@ export function DetailCard({
   details?: string;
   tags: string[];
   tagsLabel: string;
+  /** Adds a 16:10 image area on top; shows a placeholder until `src` is set */
+  media?: { src?: string | null; alt: string; /** Small label over the bottom-right corner of the image */ badge?: ReactNode };
+  /** Replaces the text tags (e.g. tech icons) */
+  icons?: ReactNode;
   onOpen: () => void;
 }) {
-  const { rowRef, measureRef, count } = useFittingTags(tags);
+  const { rowRef, measureRef, count } = useFittingTags(icons ? [] : tags);
   const more = tags.length - count;
+
+  const tagRow = (
+    <div className="relative min-w-0 overflow-hidden">
+      <ul ref={rowRef} className="flex min-w-0 flex-nowrap items-center gap-1.5" aria-label={tagsLabel}>
+        {tags.slice(0, count).map((tag) => (
+          <li key={tag} className={cn(tagClass, "min-w-0 truncate")} title={tag}>
+            {tag}
+          </li>
+        ))}
+        {more > 0 && <li className="shrink-0 px-1 text-xs font-medium text-muted-foreground">+{more}</li>}
+      </ul>
+      {/* Invisible copy used only to measure tag widths */}
+      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-1.5 whitespace-nowrap">
+        {tags.slice(0, MAX_TAGS).map((tag) => (
+          <span key={tag} className={cn(tagClass, "shrink-0")}>
+            {tag}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     // The whole card opens the details; the button is stretched over it so it stays one tab stop
     <article className="group relative flex h-full flex-col rounded-2xl border border-border/50 bg-card/30 transition-colors duration-300 hover:border-primary/40 hover:bg-card/50 [&:has(:focus-visible)]:ring-2 [&:has(:focus-visible)]:ring-ring">
+      {media && (
+        <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden rounded-t-2xl bg-muted/10">
+          {media.src ? (
+            <OptimizedImage
+              src={media.src}
+              alt={media.alt}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              draggable={false}
+              fallbackIcon={<ImageIcon className="h-10 w-10 text-muted-foreground/30" strokeWidth={1.5} />}
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground/30">
+              <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
+              <span className="text-[10px] font-medium uppercase tracking-widest">No Preview</span>
+            </div>
+          )}
+          <ViewDetailsHint />
+          {media.badge && (
+            <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-[#fff] shadow-sm ring-1 ring-white/15 backdrop-blur-sm">
+              {media.badge}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex flex-1 flex-col p-6 sm:p-7">
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="font-medium tabular-nums text-muted-foreground">{period}</span>
+        <div className="flex min-h-6 items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider tabular-nums text-muted-foreground">{period}</span>
           {badge}
         </div>
 
-        <h3 className="mt-5 font-heading text-xl font-semibold leading-snug tracking-tight text-foreground">
+        <h3 className="mt-3 font-heading text-xl font-semibold leading-snug tracking-tight text-foreground">
           <button type="button" onClick={onOpen} className="text-left focus:outline-none after:absolute after:inset-0 after:rounded-2xl">
             {title}
           </button>
         </h3>
-        <p className="mt-1.5 text-[15px] font-medium text-foreground/80">{subtitle}</p>
+        <p className="mt-1 text-base font-medium text-primary">{subtitle}</p>
         {details && (
-          <p className="mt-1 truncate text-sm text-muted-foreground" title={details}>
+          <p className="mt-2 truncate text-[13px] text-muted-foreground" title={details}>
             {details}
           </p>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-4 px-6 pb-6 sm:px-7 sm:pb-7">
-        <div className="relative min-w-0 flex-1 overflow-hidden">
-          <ul ref={rowRef} className="flex min-w-0 flex-nowrap items-center gap-1.5" aria-label={tagsLabel}>
-            {tags.slice(0, count).map((tag) => (
-              <li key={tag} className={cn(tagClass, "min-w-0 truncate")} title={tag}>
-                {tag}
-              </li>
-            ))}
-            {more > 0 && <li className="shrink-0 px-1 text-xs font-medium text-muted-foreground">+{more}</li>}
-          </ul>
-          {/* Invisible copy used only to measure tag widths */}
-          <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-1.5 whitespace-nowrap">
-            {tags.slice(0, MAX_TAGS).map((tag) => (
-              <span key={tag} className={cn(tagClass, "shrink-0")}>
-                {tag}
-              </span>
-            ))}
+      {media ? (
+        // With an image on top the footer is just the tags or icons; "View Details" shows as a hover hint over the image
+        <div className="px-6 pb-6 sm:px-7 sm:pb-7">
+          <div className="min-w-0" aria-label={icons ? tagsLabel : undefined}>
+            {icons ?? tagRow}
           </div>
         </div>
-        <span aria-hidden className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
-          Details
-          <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-        </span>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between gap-4 px-6 pb-6 sm:px-7 sm:pb-7">
+          <div className="min-w-0 flex-1">{tagRow}</div>
+          <span aria-hidden className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
+            Details
+            <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      )}
     </article>
   );
 }

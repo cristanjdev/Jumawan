@@ -7,6 +7,9 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  /** Longer write-up shown in the project's details modal; paragraphs are separated by a blank line */
+  about?: string;
+  category?: string;
   year?: string;
   image_url?: string;
   live_url?: string;

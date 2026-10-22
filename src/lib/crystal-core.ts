@@ -33,9 +33,11 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 // Facets light up as they turn edge-on to the viewer, so the bright ring and dark centre hold from any
 // angle. That is what lets the cube rest on the logo pose and then make full 360° turns.
 
-/** Cube edge length; corner-on, its outline is a hexagon of radius EDGE * √(2/3) ≈ 1.55 */
-const EDGE = 1.9;
+/** Cube edge length; corner-on, its outline is a hexagon of radius EDGE * √(2/3) ≈ 2.45 */
+const EDGE = 3;
 export const MARK_RADIUS = EDGE * Math.sqrt(2 / 3);
+/** Half the cube's edge, in the frame of the `cube` object createCrystalCore returns */
+export const CUBE_HALF = EDGE / 2;
 
 /** The crystal is modelled around a 3-unit cube; this scales it to EDGE */
 const MODEL_SIZE = 3;
@@ -47,11 +49,11 @@ const TURN_SECONDS = 6.5;
 
 const PALETTE = {
   line: "#01050d", // black outlines
+  lineLight: "#0a2f5c", // navy outlines on a light page
   navy: "#06183a", // dark glass
   deep: "#0d3fe0", // electric blue plasma
   cyan: "#2fc8ff", // main glow
   light: "#b8f6ff", // bright facets
-  void: "#010309", // centre
 };
 
 // ── GLSL ─────────────────────────────────────────────────────────────────────
@@ -119,7 +121,7 @@ const OUTPUT = /* glsl */ `
 
 /** Mosaic of triangular shards on each cube face, like the stained-glass corners of the logo */
 const FACE_PATTERN = /* glsl */ `
-  uniform vec3 cNavy, cDeep, cCyan, cLight; uniform float uTime;
+  uniform vec3 cNavy, cDeep, cCyan, cLight; uniform float uTime, uLight;
   varying vec3 vPos; varying vec3 vObjN; varying vec3 vN; varying vec3 vV; varying vec2 vUv;
   void facePattern(out float h, out float r, out float edge){
     vec2 c = vUv - .5;
@@ -208,6 +210,8 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
     cDeep: { value: color(PALETTE.deep) },
     cCyan: { value: color(PALETTE.cyan) },
     cLight: { value: color(PALETTE.light) },
+    /** 0 on a dark page, 1 on a light one */
+    uLight: { value: 0 },
   };
 
   const shader = (fragmentShader: string, side: Side = FrontSide, extra: Record<string, IUniform> = {}) =>
@@ -237,6 +241,12 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
         col = mix(col, cCyan * .8, step(.8, h) * smoothstep(.35, 1., r) * .6);
         col = mix(col, cCyan * (.5 + h * .6), innerLight() * .6);
         col += cCyan * edge * .5;
+        // light page: sky-blue glass instead of dark navy (tinted enough to stand off a white page),
+        // same shards and inner light
+        vec3 pale = mix(vec3(.42, .70, .95), vec3(.22, .52, .88), h * .7);
+        pale = mix(pale, cCyan * .9 + .1, innerLight() * .4);
+        pale = mix(pale, vec3(.12, .45, .85), edge * .6);
+        col = mix(col, pale, uLight);
         gl_FragColor = vec4(col, .94);
         ${OUTPUT}
       }`,
@@ -259,7 +269,7 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
                    + cLight * innerLight() * (.04 + step(.6, h) * .12)
                    + cLight * step(.88, h) * smoothstep(.45, 1., r) * .14
                    + cCyan * (rim * .05 + sweep * .05);
-          gl_FragColor = vec4(col, 1.);
+          gl_FragColor = vec4(col * (1. - .7 * uLight), 1.);
           ${OUTPUT}
         }`,
       ),
@@ -274,15 +284,18 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
   const gemShell = (geometry: BufferGeometry, alphaMin: number, alphaMax: number, seed: number, line: number, order: number) => {
     const material = shader(
       /* glsl */ `
-      uniform vec3 cNavy, cCyan, cLight; uniform float uTime, uAMin, uAMax, uSeed;
+      uniform vec3 cNavy, cCyan, cLight; uniform float uTime, uAMin, uAMax, uSeed, uLight;
       varying vec3 vObjN; varying vec3 vN; varying vec3 vV;
       void main(){
         float rim = 1. - abs(dot(normalize(vN), normalize(vV)));
         float h = hash3(floor(normalize(vObjN) * 40.) + uSeed);
         float lit = smoothstep(.12, .7, rim + (h - .5) * .3);
-        vec3 col = mix(cNavy * .5, cCyan, lit);
+        // light page: pale unlit facets and a deeper cyan, so the ring still stands out from the glass
+        vec3 unlit = mix(cNavy * .5, vec3(.62, .83, .97), uLight);
+        vec3 litColor = mix(cCyan, vec3(.10, .55, .95), uLight * .6);
+        vec3 col = mix(unlit, litColor, lit);
         col = mix(col, cLight, smoothstep(.45, 1., lit) * (.45 + step(.4, h) * .5));
-        col += cLight * pow(max(0., sin(uTime * 1.1 + h * 25.)), 30.) * lit * .8;
+        col += cLight * pow(max(0., sin(uTime * 0.6 + h * 25.)), 30.) * lit * .3;
         gl_FragColor = vec4(col, mix(uAMin, uAMax, lit));
         ${OUTPUT}
       }`,
@@ -298,31 +311,46 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
   };
 
   const outerGem = gemShell(new IcosahedronGeometry(1.5, 1), 0.04, 0.82, 1, 0.02, 6);
-  const innerGem = gemShell(new IcosahedronGeometry(1.08, 0), 0.1, 0.9, 7, 0.022, 4);
+  const innerGem = gemShell(new IcosahedronGeometry(1.08, 0), 0.05, 0.45, 7, 0.022, 4);
   innerGem.rotation.set(0.3, 0.5, 0);
   model.add(outerGem, innerGem);
 
-  // Black void in the centre
-  model.add(new Mesh(new SphereGeometry(0.9, 48, 32), new MeshBasicMaterial({ color: PALETTE.void })));
+  // Nucleus: dark at its rim like the logo's centre, with a steady deep-blue glow in the middle. A flat
+  // black core flickered: the inner gem's big facets kept uncovering it, so the orb looked to go dark.
+  const nucleusMaterial = shader(/* glsl */ `
+    uniform vec3 cDeep, cCyan; uniform float uLight;
+    varying vec3 vN; varying vec3 vV;
+    void main(){
+      float facing = abs(dot(normalize(vN), normalize(vV)));
+      vec3 rim = mix(cDeep * .12, cDeep * .5, uLight);
+      vec3 centre = mix(cDeep * .55 + cCyan * .18, cCyan * .7 + cDeep * .3, uLight);
+      vec3 col = mix(rim, centre, pow(facing, 2.5));
+      gl_FragColor = vec4(col, 1.);
+      ${OUTPUT}
+    }`);
+  nucleusMaterial.transparent = false;
+  nucleusMaterial.depthWrite = true;
+  model.add(new Mesh(new SphereGeometry(0.9, 32, 20), nucleusMaterial));
 
   // ── electric plasma band ─────────────────────────────────────────────────
   const plasma = new Mesh(
-    new SphereGeometry(1.44, 64, 40),
+    new SphereGeometry(1.44, 48, 32),
     additive(
       shader(/* glsl */ `
-      uniform vec3 cDeep, cCyan; uniform float uTime;
+      uniform vec3 cDeep, cCyan; uniform float uTime, uLight;
       varying vec3 vPos; varying vec3 vN; varying vec3 vV;
       void main(){
         float rim = 1. - abs(dot(normalize(vN), normalize(vV)));
         float band = smoothstep(.12, .5, rim) * (1. - smoothstep(.88, 1., rim));
         vec3 p = vPos * 1.8;
         float t = uTime * .25;
-        float n1 = 1. - abs(snoise(p + vec3(0., t, 0.)));
-        float n2 = 1. - abs(snoise(p * 2.6 - vec3(t * 1.4, 0., t)));
+        // Simplex noise can overshoot ±1; keep the base in 0..1 so pow() stays defined
+        float n1 = clamp(1. - abs(snoise(p + vec3(0., t, 0.))), 0., 1.);
+        float n2 = clamp(1. - abs(snoise(p * 2.6 - vec3(t * 1.4, 0., t))), 0., 1.);
         float veins = pow(n1, 18.) + pow(n2, 22.) * .9;
-        float cloud = snoise(p * .6 + t * .4) * .5 + .5;
+        float cloud = n1; // broad light under the veins, from the same noise (one sample cheaper)
         vec3 col = cDeep * (.3 + cloud * .7) * band * .9 + cCyan * veins * band * 1.8;
-        gl_FragColor = vec4(col, 1.);
+        gl_FragColor = vec4(col * (1. - .45 * uLight), 1.);
         ${OUTPUT}
       }`),
     ),
@@ -400,6 +428,8 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
 
   return {
     group,
+    /** The turning cube's frame: a box of ±CUBE_HALF in this object's local space */
+    cube: mark,
     /**
      * `view` is the direction from the mark to the camera: the cube rests corner-on to it, so the
      * hexagon is symmetric wherever the mark sits on screen, then turns a full 360° about the
@@ -419,8 +449,8 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
       mark.quaternion.multiplyQuaternions(sway, facing);
 
       outerGem.rotation.y -= dt * 0.12;
-      innerGem.rotation.y += dt * 0.3;
-      innerGem.rotation.x += dt * 0.1;
+      innerGem.rotation.y += dt * 0.12;
+      innerGem.rotation.x += dt * 0.04;
       arcs.rotation.y += dt * 0.2;
       arcs.rotation.z -= dt * 0.08;
       plasma.rotation.y -= dt * 0.08;
@@ -429,8 +459,11 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
     spin() {
       spinTarget += Math.PI * 2;
     },
-    /** Dark glass with its own black centre: it reads the same on light and dark pages */
-    setDark(_dark: boolean) {},
+    /** Dark navy glass on a dark page; pale frosted glass with navy outlines on a light one */
+    setDark(dark: boolean) {
+      uniforms.uLight.value = dark ? 0 : 1;
+      lineMaterial.color.set(dark ? PALETTE.line : PALETTE.lineLight);
+    },
     /** Geometry and materials are disposed by the scene traversal; nothing else is held */
     dispose() {},
   };

@@ -18,6 +18,8 @@ export interface WorkExperience {
   technologies: string[];
   team_size?: string;
   company_size?: string;
+  /** Photo for the card and the details modal, uploaded from the admin */
+  image_url?: string;
   order_index: number;
   _creationTime: number;
 }

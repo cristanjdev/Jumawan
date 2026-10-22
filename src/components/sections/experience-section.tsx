@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Briefcase } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TechIcons } from "@/components/ui/tech-icons";
 import {
   BulletList,
   DetailBlock,
@@ -85,6 +86,15 @@ function ExperienceDialog({
       subtitle={exp.company}
       badge={exp.current && <StatusPill>Current</StatusPill>}
     >
+      {exp.image_url && (
+        <img
+          src={exp.image_url}
+          alt={`${exp.position} at ${exp.company}`}
+          className="mb-5 aspect-[16/9] w-full rounded-xl object-cover sm:mb-6"
+          draggable={false}
+        />
+      )}
+
       <FactsRow
         facts={[
           ["Period", formatPeriod(exp)],
@@ -199,9 +209,11 @@ export function ExperienceSection() {
                     badge={exp.current && <StatusPill>Current</StatusPill>}
                     title={exp.position}
                     subtitle={exp.company}
-                    details={[exp.type, exp.location].filter(Boolean).join(" · ")}
+                    details={exp.location}
                     tags={exp.technologies ?? []}
                     tagsLabel="Tech stack"
+                    media={{ src: exp.image_url, alt: `${exp.position} at ${exp.company}`, badge: exp.type }}
+                    icons={<TechIcons technologies={exp.technologies ?? []} />}
                     onOpen={() => open(exp)}
                   />
                 </motion.div>

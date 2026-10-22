@@ -1,48 +1,57 @@
 import {
+  AddEquation,
   AdditiveBlending,
-  AmbientLight,
+  Box3,
   BufferAttribute,
   BufferGeometry,
-  CanvasTexture,
   Color,
-  DirectionalLight,
+  CustomBlending,
   DoubleSide,
   Group,
+  HalfFloatType,
   LineBasicMaterial,
   LineLoop,
   LineSegments,
+  Matrix4,
   Material,
   Mesh,
   MeshBasicMaterial,
+  NeutralToneMapping,
   NormalBlending,
+  OneFactor,
   Object3D,
   PerspectiveCamera,
-  Points,
-  PointsMaterial,
+  Ray,
   RingGeometry,
   Scene,
-  Sprite,
-  SpriteMaterial,
+  SrcAlphaFactor,
+  Vector2,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
+  ZeroFactor,
 } from "three";
-import { createCrystalCore, MARK_RADIUS } from "./crystal-core";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { createCrystalCore, CUBE_HALF, MARK_RADIUS } from "./crystal-core";
 
-// 3D version of the Tools & Technologies orbit. The blutech core, orbit lines, glow and dust are drawn
-// with WebGL; the tool logos stay real <img> elements (crisp, hoverable, no CORS issues with WebGL
-// textures) that this module projects onto the 3D orbits every frame.
+// 3D version of the Tools & Technologies orbit. The blutech crystal, orbit lines, beams and glow are
+// drawn with WebGL; the tool logos stay real <img> elements (crisp, hoverable, no CORS issues with
+// WebGL textures) that this module projects onto the 3D orbits every frame.
 
 export interface OrbitSceneOptions {
   /** Element the canvas fills */
   host: HTMLElement;
   /** Logo elements per orbit, inner → outer */
   rings: HTMLElement[][];
-  /** "high" adds core-to-logo beams, more dust and a sharper canvas */
+  /** "high" renders a sharper canvas */
   quality: "high" | "medium";
-  /** OS "reduce motion": a still, tilted view with no idle spin */
+  /** OS "reduce motion": a still view with no idle spin */
   reduceMotion: boolean;
   dark: boolean;
-  /** 0..1 progress of the section through the viewport; spins the orbits while scrolling */
+  /** 0..1 progress of the section through the viewport; turns the orbits while scrolling */
   getScroll: () => number;
 }
 
@@ -50,10 +59,12 @@ export interface OrbitScene {
   /** Runs the render loop only while the section is on screen and the tab is visible */
   setActive(active: boolean): void;
   setDark(dark: boolean): void;
+  /** Swaps in a new set of logo elements (tools added or removed) without rebuilding the scene */
+  setLogos(rings: HTMLElement[][]): void;
   /** Pointer position over the scene, -1..1 on both axes; (0, 0) when it leaves */
   setPointer(x: number, y: number): void;
-  /** Slows the orbit while a logo is hovered so its name can be read */
-  setHover(hovering: boolean): void;
+  /** The logo under the pointer, or null: the orbit slows and its beam lights up so its name can be read */
+  setHover(logo: HTMLElement | null): void;
   /** Whether a point (px, relative to the host) is over the crystal core */
   isOverCore(x: number, y: number): boolean;
   /** Shockwave from the core and a short burst of speed */
@@ -61,50 +72,60 @@ export interface OrbitScene {
   dispose(): void;
 }
 
-const RADII = [3.1, 4.9, 6.7];
-/** Each orbit leans a little differently, so the system reads as 3D rather than one flat disc */
-const RING_TILT: [number, number][] = [
-  [0.1, 0.16],
-  [-0.06, -0.1],
-  [0.04, 0.05],
-];
-/** Idle spin per orbit (rad/s at speed 1), alternating direction like the 2D version */
-const RING_SPEED = [0.16, -0.11, 0.06];
+/** One flat system of concentric orbits around the crystal (the cube is 3 units wide); squeezed inward on narrow screens */
+const RADII = [4.8, 8.0, 11.2];
+/** Where the squeeze pivots: clear of the crystal, so the inner orbit keeps its room even on phones */
+const SQUEEZE_FROM = 4.4;
+/** Idle spin per orbit (rad/s at speed 1); inner orbits move faster */
+const RING_SPEED = [0.16, 0.11, 0.075];
 /** Extra turn per orbit across one pass of the section through the viewport */
-const RING_SCROLL = [Math.PI, -Math.PI, Math.PI / 2];
-const RING_PHASE = [0, 0.52, 0.2];
+const RING_SCROLL = [Math.PI / 2, Math.PI / 3, Math.PI / 4];
+const RING_PHASE = [0, 0.7, 1.4];
 
 const FOV = 32;
-const ELEVATION = 0.42; // camera angle above the orbit plane (~24°)
-const MIN_DISTANCE = 16.5;
-const HALF_WIDTH = RADII[2] + 1.1; // outer orbit plus room for its logos
+const MIN_DISTANCE = 18.5;
 const CORE_RADIUS = MARK_RADIUS;
 const PULSE_SECONDS = 1.6;
 
 const THEMES = {
-  dark: { accent: "#22d3ee", line: "#38bdf8", dust: "#7dd3fc", ringOpacity: 0.22 },
-  light: { accent: "#0284c7", line: "#0369a1", dust: "#0369a1", ringOpacity: 0.3 },
+  dark: { accent: "#2fc8ff", line: "#2fc8ff", ringOpacity: 0.42, bloom: 0.6, bloomThreshold: 0.5 },
+  // on a light page the glass itself is bright, so only real highlights should bloom
+  light: { accent: "#0284c7", line: "#0284c7", ringOpacity: 0.5, bloom: 0.3, bloomThreshold: 0.82 },
 };
+
+/**
+ * Final pass, straight to the transparent canvas: tone mapping and sRGB output (what OutputPass would
+ * do, without its extra full-screen pass), then coverage. The scene's own alpha survives bloom (see
+ * the bloom blend below); glow adds just enough alpha to show over the page. The faint haze bloom
+ * spreads over the whole canvas is dropped: kept, it tints a visible rectangle over the page that
+ * brightens and dims as the crystal turns.
+ */
+const FinalShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float coverage = clamp(c.a, 0.0, 1.0);
+      gl_FragColor = vec4(c.rgb, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      float glow = max(gl_FragColor.r, max(gl_FragColor.g, gl_FragColor.b));
+      float keep = max(coverage, smoothstep(0.04, 0.16, glow));
+      gl_FragColor = vec4(gl_FragColor.rgb * keep, clamp(max(coverage, glow * keep), 0.0, 1.0));
+    }`,
+};
+
+/** Hold to 60 fps on high-refresh screens; the motion is slow enough that more frames add nothing */
+const MIN_FRAME_SECONDS = 1 / 62;
 
 const damp = (current: number, target: number, rate: number, dt: number) =>
   current + (target - current) * (1 - Math.exp(-rate * dt));
 
-/** Soft white dot used for the glow, logo halos and dust */
-function glowTexture() {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, "rgba(255,255,255,1)");
-  gradient.addColorStop(0.25, "rgba(255,255,255,0.5)");
-  gradient.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-  return new CanvasTexture(canvas);
-}
-
-function circleGeometry(radius: number, segments = 192) {
+function circleGeometry(radius: number, segments = 256) {
   const positions = new Float32Array(segments * 3);
   for (let i = 0; i < segments; i++) {
     const a = (i / segments) * Math.PI * 2;
@@ -114,11 +135,24 @@ function circleGeometry(radius: number, segments = 192) {
   return new BufferGeometry().setAttribute("position", new BufferAttribute(positions, 3));
 }
 
+interface Planet {
+  el: HTMLElement;
+  ring: number;
+  angle: number;
+  half: number;
+  world: Vector3;
+  /** Last written styles, so unchanged ones aren't written again every frame */
+  opacity: string;
+  z: string;
+}
+
 export function createOrbitScene({ host, rings, quality, reduceMotion, dark, getScroll }: OrbitSceneOptions): OrbitScene {
   // Throws when WebGL is unavailable; the caller falls back to the 2D orbit
-  const renderer = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+  // No MSAA on the canvas itself: the scene is drawn into the composer's targets, so it would be wasted
+  const renderer = new WebGLRenderer({ alpha: true, antialias: false, powerPreference: "high-performance" });
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === "high" ? 1.75 : 1.25));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === "high" ? 1.5 : 1));
+  renderer.toneMapping = NeutralToneMapping;
   const canvas = renderer.domElement;
   canvas.style.width = "100%";
   canvas.style.height = "100%";
@@ -127,84 +161,77 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(FOV, 1, 0.1, 100);
-  const glow = glowTexture();
 
-  scene.add(new AmbientLight(0xffffff, 0.9));
-  const sun = new DirectionalLight(0xffffff, 2.2);
-  sun.position.set(4, 7, 6);
-  scene.add(sun);
+  // ── post-processing: bloom on a transparent canvas ─────────────────────────
+  // Multisampled target: the canvas itself has no MSAA, and without this the outlines are jagged
+  const composer = new EffectComposer(
+    renderer,
+    new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: quality === "high" ? 4 : 2 }),
+  );
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new Vector2(1, 1), THEMES.dark.bloom, 0.25, 0.5);
+  // Bloom normally overwrites alpha, which would turn the transparent canvas into a black box. Add
+  // its light the usual way (src alpha, one) but leave the scene's alpha alone.
+  const bloomBlend = bloom.blendMaterial;
+  bloomBlend.blending = CustomBlending;
+  bloomBlend.blendEquation = AddEquation;
+  bloomBlend.blendSrc = SrcAlphaFactor;
+  bloomBlend.blendDst = OneFactor;
+  bloomBlend.blendSrcAlpha = ZeroFactor;
+  bloomBlend.blendDstAlpha = OneFactor;
+  composer.addPass(bloom);
+  composer.addPass(new ShaderPass(FinalShader));
 
   // ── orbit system ─────────────────────────────────────────────────────────
   const system = new Group();
   scene.add(system);
 
+  // Orbit lines and beams write depth and are drawn before the crystal (lower renderOrder): where an
+  // orbit passes in front of the cube the glass is then drawn behind the line, and where it passes
+  // behind, the glass covers it. Without depth the glass painted over the near side too.
   const ringLineMaterials: LineBasicMaterial[] = [];
-  const spinners = RADII.map((radius, i) => {
-    const tilt = new Group();
-    tilt.rotation.set(RING_TILT[i][0], 0, RING_TILT[i][1]);
-    const material = new LineBasicMaterial({ transparent: true, depthWrite: false });
+  const unitCircle = circleGeometry(1);
+  const ringLines: LineLoop[] = [];
+  const spinners = RADII.map(() => {
+    const material = new LineBasicMaterial({ transparent: true, depthWrite: true });
     ringLineMaterials.push(material);
-    tilt.add(new LineLoop(circleGeometry(radius), material));
+    const line = new LineLoop(unitCircle, material);
+    ringLines.push(line);
+    system.add(line);
     const spinner = new Group();
-    tilt.add(spinner);
-    system.add(tilt);
+    system.add(spinner);
     return spinner;
   });
 
-  const planets = rings.flatMap((logos, ring) =>
-    logos.map((el, i) => ({
-      el,
-      ring,
-      angle: (i / Math.max(1, logos.length)) * Math.PI * 2,
-      half: 0,
-      behind: null as boolean | null,
-      world: new Vector3(),
-    })),
-  );
-
-  // Halo under each logo (dark mode) so the logos sit in the scene instead of on top of it
-  const haloPositions = new Float32Array(planets.length * 3);
-  const haloGeometry = new BufferGeometry().setAttribute("position", new BufferAttribute(haloPositions, 3));
-  const haloMaterial = new PointsMaterial({
-    map: glow,
-    size: 1.5,
-    transparent: true,
-    opacity: 0.35,
-    depthWrite: false,
-    blending: AdditiveBlending,
-  });
-  scene.add(new Points(haloGeometry, haloMaterial));
-
-  // Beams from the core to each logo (high quality, dark mode)
-  const beamPositions = new Float32Array(planets.length * 6);
-  const beamColors = new Float32Array(planets.length * 6);
-  const beamGeometry = new BufferGeometry()
-    .setAttribute("position", new BufferAttribute(beamPositions, 3))
-    .setAttribute("color", new BufferAttribute(beamColors, 3));
+  // Beams from each logo into the crystal: bright at the logo, fading toward the core
+  const beamGeometry = new BufferGeometry();
   const beamMaterial = new LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.14,
-    depthWrite: false,
+    depthWrite: true,
     blending: AdditiveBlending,
   });
-  const beams = new LineSegments(beamGeometry, beamMaterial);
-  beams.visible = quality === "high";
-  scene.add(beams);
+  scene.add(new LineSegments(beamGeometry, beamMaterial));
 
-  // Dust drifting in the orbit plane
-  const dustCount = quality === "high" ? 320 : 160;
-  const dustPositions = new Float32Array(dustCount * 3);
-  for (let i = 0; i < dustCount; i++) {
-    const r = 2 + Math.random() * 6.4;
-    const a = Math.random() * Math.PI * 2;
-    dustPositions[i * 3] = Math.cos(a) * r;
-    dustPositions[i * 3 + 1] = (Math.random() - 0.5) * 1.4;
-    dustPositions[i * 3 + 2] = Math.sin(a) * r;
-  }
-  const dustMaterial = new PointsMaterial({ map: glow, size: 0.12, transparent: true, depthWrite: false });
-  const dust = new Points(new BufferGeometry().setAttribute("position", new BufferAttribute(dustPositions, 3)), dustMaterial);
-  system.add(dust);
+  let planets: Planet[] = [];
+  let hovered: HTMLElement | null = null;
+  const placeLogos = (logos: HTMLElement[][]) => {
+    planets = logos.flatMap((ring, r) =>
+      ring.map((el, i) => ({
+        el,
+        ring: r,
+        angle: (i / Math.max(1, ring.length)) * Math.PI * 2,
+        half: el.offsetWidth / 2,
+        world: new Vector3(),
+        opacity: "",
+        z: "",
+      })),
+    );
+    beamGeometry.setAttribute("position", new BufferAttribute(new Float32Array(planets.length * 6), 3));
+    beamGeometry.setAttribute("color", new BufferAttribute(new Float32Array(planets.length * 6), 3));
+    if (hovered && !planets.some((p) => p.el === hovered)) hovered = null;
+  };
+  placeLogos(rings);
 
   // ── core: the blutech crystal, turned toward the camera ────────────────────
   const core = new Group();
@@ -212,11 +239,6 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
   const mark = createCrystalCore({ pixelRatio: renderer.getPixelRatio() });
   const toCamera = new Vector3();
   core.add(mark.group);
-
-  const coreGlowMaterial = new SpriteMaterial({ map: glow, transparent: true, depthWrite: false });
-  const coreGlow = new Sprite(coreGlowMaterial);
-  coreGlow.scale.setScalar(5.5);
-  core.add(coreGlow);
 
   // Shockwaves for pulse(): a small pool of flat rings in the orbit plane
   const pulseGeometry = new RingGeometry(0.96, 1, 128);
@@ -231,53 +253,83 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
 
   // ── theme ────────────────────────────────────────────────────────────────
   let isDark = dark;
+  const accent = new Color();
   const applyTheme = () => {
     const t = isDark ? THEMES.dark : THEMES.light;
+    // Additive glow vanishes on a light page, so light mode uses normal blending and drops the beams
     const blending = isDark ? AdditiveBlending : NormalBlending;
     for (const m of ringLineMaterials) {
       m.color.set(t.line);
       m.opacity = t.ringOpacity;
     }
+    accent.set(t.accent);
     mark.setDark(isDark);
-    coreGlowMaterial.color.set(t.accent);
-    coreGlowMaterial.opacity = isDark ? 0.55 : 0.22;
-    dustMaterial.color.set(t.dust);
-    dustMaterial.opacity = isDark ? 0.75 : 0.35;
+    bloom.strength = t.bloom;
+    bloom.threshold = t.bloomThreshold;
     for (const { material } of pulses) material.color.set(t.accent);
-    // Additive glow vanishes on a light page, so light mode uses normal blending and drops the halos/beams
-    for (const m of [coreGlowMaterial, dustMaterial, ...pulses.map((p) => p.material)] as Material[]) {
+    for (const m of [...ringLineMaterials, ...pulses.map((p) => p.material)] as Material[]) {
       m.blending = blending;
       m.needsUpdate = true;
     }
-    haloMaterial.color.set(t.accent);
-    haloMaterial.visible = isDark;
     beamMaterial.visible = isDark;
-    const tip = new Color(t.accent);
-    for (let i = 0; i < planets.length; i++) {
-      // Core end is black, which additive blending renders as transparent: the beam fades in toward the logo
-      beamColors.set([0, 0, 0, tip.r, tip.g, tip.b], i * 6);
-    }
-    beamGeometry.attributes.color.needsUpdate = true;
   };
   applyTheme();
 
   // ── layout ───────────────────────────────────────────────────────────────
+  const projected = new Vector3();
   let width = 1;
   let height = 1;
   let distance = MIN_DISTANCE;
+  let radii = RADII.slice();
+  let elevation = 0;
   const tanHalfFov = Math.tan(((FOV / 2) * Math.PI) / 180);
+  const fitPoint = new Vector3();
+  /** Whether a point projects inside the canvas, the given number of px clear of its edges */
+  const onScreen = (x: number, y: number, z: number, marginX: number, marginTop: number, marginBottom: number) => {
+    projected.copy(fitPoint.set(x, y, z)).project(camera);
+    return (
+      Math.abs(projected.x) < 1 - (2 * marginX) / width &&
+      projected.y < 1 - (2 * marginTop) / height &&
+      projected.y > -1 + (2 * marginBottom) / height
+    );
+  };
 
   const measure = () => {
     width = Math.max(1, host.clientWidth);
     height = Math.max(1, host.clientHeight);
     renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    // Pull the camera back until the outer orbit fits the width
-    distance = Math.max(MIN_DISTANCE, HALF_WIDTH / (tanHalfFov * camera.aspect));
-    camera.position.set(0, Math.sin(ELEVATION) * distance, Math.cos(ELEVATION) * distance);
-    camera.lookAt(0, -1, 0); // aim below the core: the near side of the orbits needs more room than the far side
+    composer.setSize(width, height);
+    const aspect = width / height;
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
     for (const p of planets) p.half = p.el.offsetWidth / 2;
+    const iconHalf = planets[0]?.half ?? 28;
+
+    // Narrow screens: bring the orbits in toward the crystal and look from higher up, so the system
+    // uses the height instead of shrinking to fit the width
+    const squeeze = Math.min(1, Math.max(0.45, (aspect - 0.5) / 1.1));
+    radii = RADII.map((r) => SQUEEZE_FROM + (r - SQUEEZE_FROM) * squeeze);
+    ringLines.forEach((line, i) => line.scale.setScalar(radii[i]));
+    elevation = ((aspect < 0.8 ? 55 : aspect < 1 ? 42 : aspect < 1.4 ? 33 : 27) * Math.PI) / 180;
+
+    // Pull the camera back until everything fits: the logos at the outer orbit's sides, near and far
+    // edges (with room for the hover label below), and the top of the crystal
+    const outer = radii[2];
+    const margin = iconHalf * 1.1 + 6;
+    distance = MIN_DISTANCE;
+    for (let i = 0; i < 120; i++) {
+      camera.position.set(0, Math.sin(elevation) * distance, Math.cos(elevation) * distance);
+      camera.lookAt(0, -1.2, 0); // aim below the core: the near side of the orbits needs more room
+      camera.updateMatrixWorld();
+      const fits =
+        onScreen(outer, 0, 0, margin, 0, 0) &&
+        onScreen(-outer, 0, 0, margin, 0, 0) &&
+        onScreen(0, 0, outer, 0, 0, margin + 22) &&
+        onScreen(0, 0, -outer, 0, margin, 0) &&
+        onScreen(0, MARK_RADIUS + 0.4, 0, 0, 8, 0);
+      if (fits) break;
+      distance += 0.3;
+    }
   };
 
   // ── animation state ──────────────────────────────────────────────────────
@@ -285,7 +337,6 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
   let base = 0; // accumulated idle spin
   let speed = 1; // burst from pulse(), decays back to 1
   let hoverSpeed = 1;
-  let hovering = false;
   let scroll = getScroll();
   let pointerX = 0;
   let pointerY = 0;
@@ -293,14 +344,31 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
   let targetY = 0;
   let intro = reduceMotion ? 1 : 0; // logos fade in once the scene is up
 
-  const projected = new Vector3();
   const local = new Vector3();
+  const beamEnd = new Vector3();
+
+  // Occlusion by the crystal: a ray from the camera to each logo, tested against the turning cube in
+  // the cube's own frame. The box grows by about a logo's half-size, so a logo partly behind the
+  // cube's edge counts too; the glass then covers just the part it overlaps.
+  const cubeBox = new Box3(new Vector3(-CUBE_HALF, -CUBE_HALF, -CUBE_HALF), new Vector3(CUBE_HALF, CUBE_HALF, CUBE_HALF));
+  const grownBox = new Box3();
+  const toCube = new Matrix4();
+  const ray = new Ray();
+  const hit = new Vector3();
+  const behindCrystal = (logo: Vector3, halfWorld: number) => {
+    grownBox.copy(cubeBox).expandByScalar(halfWorld * 0.8);
+    ray.origin.copy(camera.position).applyMatrix4(toCube);
+    ray.direction.copy(logo).applyMatrix4(toCube).sub(ray.origin);
+    const toLogo = ray.direction.length();
+    ray.direction.divideScalar(toLogo);
+    return ray.intersectBox(grownBox, hit) !== null && hit.distanceTo(ray.origin) < toLogo;
+  };
 
   const update = (dt: number) => {
     elapsed += dt;
     if (!reduceMotion) {
       speed = 1 + (speed - 1) * Math.exp(-3 * dt);
-      hoverSpeed = damp(hoverSpeed, hovering ? 0.12 : 1, 4, dt);
+      hoverSpeed = damp(hoverSpeed, hovered ? 0 : 1, 4, dt);
       base += dt * speed * hoverSpeed;
       scroll = damp(scroll, getScroll(), 6, dt);
       pointerX = damp(pointerX, targetX, 3, dt);
@@ -309,19 +377,18 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
     }
 
     // Whole system leans toward the pointer and sways a little
-    const sway = reduceMotion ? 0 : Math.sin(elapsed * 0.3) * 0.03;
-    system.rotation.set(0.06 + pointerY * 0.12, 0, -pointerX * 0.08 + sway);
+    const sway = reduceMotion ? 0 : Math.sin(elapsed * 0.3) * 0.02;
+    system.rotation.set(pointerY * 0.1, 0, -pointerX * 0.06 + sway);
 
     spinners.forEach((spinner, i) => {
-      spinner.rotation.y = RING_PHASE[i] + base * RING_SPEED[i] + scroll * RING_SCROLL[i];
+      spinner.rotation.y = RING_PHASE[i] - base * RING_SPEED[i] - scroll * RING_SCROLL[i];
     });
-    dust.rotation.y = base * 0.02;
 
-    // Core: a small sway (and a little with the scroll) — enough to read as 3D, small enough to stay the logo
-    const yaw = reduceMotion ? 0 : Math.sin(elapsed * 0.45) * 0.1 + (scroll - 0.5) * 0.12;
+    // Core: rests on the logo pose, then turns a full 360°; a small sway follows the scroll
+    const yaw = reduceMotion ? 0 : (scroll - 0.5) * 0.12;
     toCamera.copy(camera.position).sub(core.position).normalize();
     mark.update(reduceMotion ? 0 : dt, reduceMotion ? 0 : elapsed, yaw, toCamera);
-    core.position.y = reduceMotion ? 0 : Math.sin(elapsed * 0.8) * 0.12;
+    core.position.y = reduceMotion ? 0 : Math.sin(elapsed * 0.8) * 0.08;
 
     for (const p of pulses) {
       if (p.age === Infinity) continue;
@@ -332,7 +399,8 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
         p.mesh.visible = false;
         continue;
       }
-      p.mesh.scale.setScalar(CORE_RADIUS + t * 7.5);
+      // The wave stops at the outer orbit's logos: the camera frames no more than that
+      p.mesh.scale.setScalar(CORE_RADIUS + (1 - (1 - t) * (1 - t)) * (radii[2] + 0.5 - CORE_RADIUS));
       p.material.opacity = Math.pow(1 - t, 1.5) * 0.8;
     }
 
@@ -340,34 +408,52 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
     camera.updateMatrixWorld();
 
     // Project each logo onto its orbit
+    const beamPositions = beamGeometry.attributes.position as BufferAttribute;
+    const beamColors = beamGeometry.attributes.color as BufferAttribute;
+    const centerDistance = camera.position.distanceTo(core.position);
+    toCube.copy(mark.cube.matrixWorld).invert();
+    const pxPerUnit = height / 2 / (centerDistance * tanHalfFov);
     for (let i = 0; i < planets.length; i++) {
       const p = planets[i];
-      const radius = RADII[p.ring];
+      const radius = radii[p.ring];
       local.set(Math.cos(p.angle) * radius, 0, Math.sin(p.angle) * radius);
       p.world.copy(local).applyMatrix4(spinners[p.ring].matrixWorld);
-      haloPositions.set([p.world.x, p.world.y, p.world.z], i * 3);
-      beamPositions.set([0, core.position.y, 0, p.world.x, p.world.y, p.world.z], i * 6);
 
       projected.copy(p.world).project(camera);
       const x = (projected.x + 1) * 0.5 * width;
       const y = (1 - projected.y) * 0.5 * height;
-      const scale = Math.min(1.25, Math.max(0.7, distance / camera.position.distanceTo(p.world)));
-      const depth = (p.world.z + radius) / (2 * radius); // 0 = far side, 1 = near side
-      p.el.style.transform = `translate3d(${x - p.half}px, ${y - p.half}px, 0) scale(${scale.toFixed(3)})`;
-      p.el.style.opacity = ((0.5 + depth * 0.5) * intro).toFixed(3);
 
-      // Logos on the far side go under the canvas, so the crystal covers them as they pass behind it
-      const behind = p.world.z < 0;
-      if (behind !== p.behind) {
-        p.behind = behind;
-        p.el.style.zIndex = behind ? "1" : "3";
-      }
+      // depth: +1 nearest the viewer, -1 furthest behind the crystal
+      const depth = Math.max(-1, Math.min(1, (centerDistance - camera.position.distanceTo(p.world)) / radii[2]));
+      const near = (depth + 1) / 2;
+      const isHovered = p.el === hovered;
+      const scale = (0.8 + 0.28 * near) * (isHovered ? 1.18 : 1);
+      const opacity = isHovered ? 1 : (0.62 + 0.38 * near) * intro;
+      p.el.style.transform = `translate3d(${x - p.half}px, ${y - p.half}px, 0) scale(${scale.toFixed(3)})`;
+      const nextOpacity = opacity.toFixed(2);
+      if (nextOpacity !== p.opacity) p.el.style.opacity = p.opacity = nextOpacity;
+      // Stack by true depth, as in 3D: a nearer logo always covers a farther one. The canvas is one
+      // layer (z 1000), so logos farther than the crystal, or with the crystal in front of them, go
+      // under it in depth order, and its glass covers them; nearer ones stack above it.
+      const rank = Math.round(near * 899);
+      const under = depth < 0 || behindCrystal(p.world, p.half / pxPerUnit);
+      const nextZ = isHovered ? "2000" : String(under ? 1 + rank : 1001 + rank);
+      if (nextZ !== p.z) p.el.style.zIndex = p.z = nextZ;
+
+      // Beam from the logo to the crystal's surface
+      beamEnd.copy(p.world).sub(core.position).setLength(CORE_RADIUS * 0.9).add(core.position);
+      beamPositions.setXYZ(i * 2, p.world.x, p.world.y, p.world.z);
+      beamPositions.setXYZ(i * 2 + 1, beamEnd.x, beamEnd.y, beamEnd.z);
+      const tip = (isHovered ? 0.9 : 0.22) * opacity;
+      const root = isHovered ? 0.35 : 0.03;
+      beamColors.setXYZ(i * 2, accent.r * tip, accent.g * tip, accent.b * tip);
+      beamColors.setXYZ(i * 2 + 1, accent.r * root, accent.g * root, accent.b * root);
     }
-    haloGeometry.attributes.position.needsUpdate = true;
-    beamGeometry.attributes.position.needsUpdate = true;
+    beamPositions.needsUpdate = true;
+    beamColors.needsUpdate = true;
   };
 
-  const render = () => renderer.render(scene, camera);
+  const render = () => composer.render();
   const renderOnce = () => {
     update(0);
     render();
@@ -380,7 +466,9 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
-    const dt = last ? Math.min((now - last) / 1000, 0.05) : 1 / 60;
+    const since = last ? (now - last) / 1000 : 1 / 60;
+    if (last && since < MIN_FRAME_SECONDS) return;
+    const dt = Math.min(since, 0.05);
     last = now;
     update(dt);
     render();
@@ -422,12 +510,16 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
       applyTheme();
       if (!raf) renderOnce();
     },
+    setLogos(next) {
+      placeLogos(next);
+      if (!raf) renderOnce();
+    },
     setPointer(x, y) {
       targetX = x;
       targetY = y;
     },
-    setHover(next) {
-      hovering = next;
+    setHover(logo) {
+      hovered = logo;
     },
     isOverCore(x, y) {
       projected.set(0, core.position.y, 0).project(camera);
@@ -455,8 +547,8 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
         if (Array.isArray(material)) material.forEach((m) => m.dispose());
         else (material as Material | undefined)?.dispose();
       });
-      glow.dispose();
       mark.dispose();
+      composer.dispose();
       renderer.dispose();
       canvas.remove();
     },

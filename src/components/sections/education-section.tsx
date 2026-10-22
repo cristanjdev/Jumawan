@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
-import { DetailBlock, DetailCard, DetailDialog, StatusPill } from "@/components/ui/detail-card";
+import { DetailBlock, DetailCard, DetailDialog, FactsRow, StatusPill, TagList } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
 import { useReturnFocus } from "@/hooks/use-return-focus";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
@@ -63,14 +63,6 @@ function EducationDialog({
     items: edu.achievements.filter((a) => a.group === group),
   })).filter((g) => g.items.length > 0);
 
-  // Honors already show in the header badge ("Graduated with Honors"). Level is hidden on phones,
-  // where the degree title already says it and the space is needed.
-  const facts = [
-    ["Level", edu.level, "hidden sm:block"],
-    ["Location", edu.location, ""],
-    ["GPA", edu.gpa, ""],
-  ].filter((fact) => Boolean(fact[1]));
-
   return (
     <DetailDialog
       open={education !== null}
@@ -78,70 +70,45 @@ function EducationDialog({
       onCloseAutoFocus={onCloseAutoFocus}
       title={edu.degree}
       subtitle={edu.school}
+      // Honors already show in this badge ("Graduated with Honors")
       badge={edu.status && <StatusPill>{statusLabel(edu)}</StatusPill>}
     >
-      {/* From md up every entry gets the same body height, so both modals open at one size. Each column is
-          anchored top and bottom (years / facts, description / coursework), so a shorter entry gains
-          breathing room in the middle instead of an empty strip at the bottom. */}
-      <div className="grid gap-4 sm:gap-5 md:min-h-[32.5rem] md:grid-rows-[auto_1fr] lg:min-h-[29.25rem] lg:grid-cols-[15rem_1fr] lg:grid-rows-none lg:gap-8">
-        {/* Record sidebar from lg: years on top, facts pinned to the bottom. Below lg it is one strip. */}
-        <aside className="grid grid-cols-2 gap-4 rounded-xl bg-muted/15 px-4 py-3 sm:grid-cols-3 sm:p-5 lg:flex lg:flex-col lg:gap-0">
-          <div>
-            <p className="text-xs text-muted-foreground">Years attended</p>
-            <p className="mt-0.5 font-heading text-lg font-semibold tabular-nums tracking-tight text-foreground lg:mt-1 lg:text-2xl">
-              {edu.period}
-            </p>
-          </div>
-          <dl className="contents lg:mt-auto lg:grid lg:gap-4 lg:border-t lg:border-border/40 lg:pt-4">
-            {facts.map(([label, value, className]) => (
-              <div key={label} className={cn("min-w-0", className)}>
-                <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="mt-0.5 text-sm font-medium text-foreground">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </aside>
+      <FactsRow
+        facts={[
+          ["Years attended", edu.period],
+          ["Level", edu.level],
+          ["GPA", edu.gpa],
+          ["Location", edu.location],
+        ]}
+      />
 
-        <div className="flex min-w-0 flex-col">
-          {edu.description && <p className="text-[13px] leading-normal text-foreground/80 sm:text-[15px] sm:leading-relaxed">{edu.description}</p>}
+      {edu.description && (
+        <p className="mt-5 text-[13px] leading-normal text-foreground/80 sm:mt-6 sm:text-sm sm:leading-relaxed">{edu.description}</p>
+      )}
 
-          {next && (
-            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground sm:mt-4 sm:text-sm">
-              <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
-              Continued to <span className="font-medium text-foreground">{next.degree}</span>
-              <span className="tabular-nums">({next.period})</span>
-            </p>
-          )}
+      {next && (
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground sm:text-sm">
+          <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
+          Continued to <span className="font-medium text-foreground">{next.degree}</span>
+          <span className="tabular-nums">({next.period})</span>
+        </p>
+      )}
 
-          {groups.length > 0 && (
-            <div className={cn("mt-4 grid gap-4 sm:mt-6 sm:gap-5", groups.length > 1 && "md:grid-cols-2 md:gap-8")}>
-              {groups.map(({ group, items }) => (
-                <DetailBlock key={group} title={group}>
-                  <Ledger items={items} />
-                </DetailBlock>
-              ))}
-            </div>
-          )}
-
-          {edu.coursework.length > 0 && (
-            // From md up the coursework tiles take whatever height is left, so a shorter entry fills the
-            // modal with its own subjects; on phones they stay a compact ruled list
-            <section className="mt-4 flex flex-col sm:mt-6 md:flex-1">
-              <h4 className="text-sm font-semibold text-foreground">Key coursework</h4>
-              <ul className="mt-2 grid grid-cols-2 gap-x-4 sm:mt-2.5 sm:gap-x-8 md:flex-1 md:auto-rows-fr md:grid-cols-3 md:gap-2 lg:grid-cols-2">
-                {edu.coursework.map((course) => (
-                  <li
-                    key={course}
-                    className="border-b border-border/40 py-0.5 text-[13px] text-muted-foreground sm:py-2 sm:text-sm md:flex md:items-center md:rounded-lg md:border-0 md:bg-muted/15 md:px-3 md:text-foreground/80"
-                  >
-                    {course}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+      {groups.length > 0 && (
+        <div className={cn("mt-5 grid gap-5 sm:mt-6 sm:gap-6", groups.length > 1 && "md:grid-cols-2 md:gap-10")}>
+          {groups.map(({ group, items }) => (
+            <DetailBlock key={group} title={group}>
+              <Ledger items={items} />
+            </DetailBlock>
+          ))}
         </div>
-      </div>
+      )}
+
+      {edu.coursework.length > 0 && (
+        <DetailBlock title="Key coursework" className="mt-5 sm:mt-6">
+          <TagList items={edu.coursework} />
+        </DetailBlock>
+      )}
     </DetailDialog>
   );
 }
@@ -181,6 +148,7 @@ export function EducationSection() {
                   details={edu.location}
                   tags={edu.coursework}
                   tagsLabel="Key coursework"
+                  media={{ alt: edu.school, badge: edu.level }}
                   onOpen={() => open(edu)}
                 />
               </motion.div>

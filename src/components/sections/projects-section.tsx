@@ -1,11 +1,4 @@
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -18,9 +11,11 @@ import { motion, useReducedMotion } from "framer-motion";
 import { convexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
 import { Button } from "@/components/ui/button";
+import { TechIcons } from "@/components/ui/tech-icons";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
-import { ExternalLink, FolderOpen, Github, X, ZoomIn, ZoomOut } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ExternalLink, FolderOpen, Github } from "lucide-react";
+import { DetailBlock, DetailDialog, TagList } from "@/components/ui/detail-card";
+import { useLatest } from "@/hooks/use-latest";
 import { useLenis } from "lenis/react";
 
 export function ProjectsSection() {
@@ -28,7 +23,6 @@ export function ProjectsSection() {
   const { projects, loading, fetchProjects } = useProjectStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
   const [isMobile, setIsMobile] = useState(false);
   const [currentCard, setCurrentCard] = useState(0);
   const [showAllModal, setShowAllModal] = useState(false);
@@ -47,14 +41,19 @@ export function ProjectsSection() {
     }
   }, [projects]);
 
+  const [cardsPerPage, setCardsPerPage] = useState(3);
+
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setCardsPerPage(width < 768 ? 1 : width < 1024 ? 2 : 3);
+    };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  const cardsPerPage = isMobile ? 1 : 2;
   const totalPages = Math.ceil(projects.length / cardsPerPage);
   const currentPage = Math.floor(currentCard / cardsPerPage);
 
@@ -174,7 +173,6 @@ export function ProjectsSection() {
   const openModalAt = useCallback((index: number) => {
     setSelectedIndex(index);
     setIsModalOpen(true);
-    setZoomLevel(1);
   }, []);
 
   const safeOpenModal = useCallback((index: number) => {
@@ -184,7 +182,6 @@ export function ProjectsSection() {
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
-    setZoomLevel(1);
     setTimeout(() => { setSelectedIndex(null); }, 150);
   }, []);
 
@@ -226,7 +223,7 @@ export function ProjectsSection() {
     >
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
 
-      <div className="relative h-[295px] sm:h-[359px] w-full overflow-hidden bg-muted/5 flex items-center justify-center">
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/5 flex items-center justify-center">
         {project.image_url ? (
           <>
             <OptimizedImage
@@ -251,16 +248,7 @@ export function ProjectsSection() {
           {project.title}
         </h3>
         <p className="text-xs text-muted-foreground/60 leading-relaxed line-clamp-2">{project.description}</p>
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {project.technologies.slice(0, 4).map((tech, idx) => (
-            <span key={idx} className="px-2 py-0.5 rounded-md bg-muted/5 border border-[var(--border-subtle)] text-[10px] font-medium text-muted-foreground">
-              {tech}
-            </span>
-          ))}
-          {project.technologies.length > 4 && (
-            <span className="px-2 py-0.5 text-[10px] text-primary/60">+{project.technologies.length - 4}</span>
-          )}
-        </div>
+        <TechIcons technologies={project.technologies} className="justify-center" />
         <p className="text-[10px] text-primary/60 italic">Tap to view details</p>
       </div>
     </div>
@@ -345,7 +333,7 @@ export function ProjectsSection() {
                 </motion.div>
               )}
 
-              {/* Unified swipeable carousel — 1 card mobile, 2 cards desktop */}
+              {/* Unified swipeable carousel — 1 card mobile, 2 tablet, 3 desktop */}
               <motion.div variants={itemVariants} className="relative overflow-hidden -mx-6">
                 <div
                   ref={scrollRef}
@@ -373,7 +361,7 @@ export function ProjectsSection() {
                     <div
                       key={project.id}
                       className="shrink-0"
-                      style={{ width: isMobile ? 'min(80vw, 340px)' : 'calc(50% - 12px)' }}
+                      style={{ width: isMobile ? 'min(80vw, 340px)' : `calc((100% - ${(cardsPerPage - 1) * 24}px) / ${cardsPerPage})` }}
                     >
                       {isMobile ? renderMobileCard(project, index) : (
                         <ProjectCard project={project} index={index} openModalAt={safeOpenModal} />
@@ -406,13 +394,9 @@ export function ProjectsSection() {
         {/* Project detail modal */}
         <ProjectsModal
           isOpen={isModalOpen}
-          onOpenChange={(open) => (open ? setIsModalOpen(true) : closeModal())}
+          onClose={closeModal}
           projects={projects}
           selectedIndex={selectedIndex}
-          onPrev={showPrev}
-          onNext={showNext}
-          zoomLevel={zoomLevel}
-          setZoomLevel={setZoomLevel}
         />
 
         {/* See All modal */}
@@ -526,169 +510,88 @@ function SeeAllProjectsModal({
 // Project detail modal
 export function ProjectsModal({
   isOpen,
-  onOpenChange,
+  onClose,
   projects,
   selectedIndex,
-  onPrev,
-  onNext,
-  zoomLevel,
-  setZoomLevel,
 }: {
   isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
   projects: Project[];
   selectedIndex: number | null;
-  onPrev: () => void;
-  onNext: () => void;
-  zoomLevel: number;
-  setZoomLevel: (z: number) => void;
 }) {
-  const project = selectedIndex !== null ? projects[selectedIndex] : null;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const lenis = useLenis();
-
-  useEffect(() => {
-    if (isOpen) { lenis?.stop(); document.body.style.overflow = 'hidden'; }
-    else { lenis?.start(); document.body.style.overflow = ''; }
-    return () => { lenis?.start(); document.body.style.overflow = ''; };
-  }, [isOpen, lenis]);
-
-  useEffect(() => {
-    if (!isOpen || zoomLevel === 1) {
-      setPosition({ x: 0, y: 0 });
-    }
-  }, [isOpen, zoomLevel, project]);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.min(Math.max(zoomLevel + delta, 1), 4);
-    setZoomLevel(newZoom);
-    if (newZoom === 1) setPosition({ x: 0, y: 0 });
-  }, [zoomLevel, setZoomLevel]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  }, [position]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-  }, [isDragging, dragStart]);
-
-  const stopDragging = useCallback(() => {
-    setIsDragging(false);
-    setTimeout(() => { setPosition({ x: 0, y: 0 }); }, 50);
-  }, []);
-
+  // Hold on to the last project while closing so the exit animation still has content
+  const project = useLatest(selectedIndex !== null ? projects[selectedIndex] ?? null : null);
   if (!project) return null;
 
+  const about = project.about?.split(/\n{2,}/).filter(Boolean) ?? [];
+  const linkClass =
+    "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium text-primary ring-1 ring-inset ring-primary/30 transition-colors hover:bg-primary/10";
+
   return (
-    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="w-[95vw] sm:w-[90vw] md:w-[85vw] max-w-[1000px] p-0 overflow-hidden rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-cyan-500/20 bg-[var(--surface-modal)] border-none">
-        <AlertDialogHeader className="absolute top-0 left-0 right-0 z-50 p-4 bg-gradient-to-b from-[var(--overlay-bg)] to-transparent pointer-events-none">
-          <div className="flex items-start justify-between gap-4 pointer-events-auto">
-            <AlertDialogTitle className="text-base md:text-lg font-bold text-white/90 tracking-tight drop-shadow-md line-clamp-1 mt-1">
-              {project.title}
-            </AlertDialogTitle>
-            <div className="flex items-center gap-2">
-              {project.live_url && (
-                <a href={project.live_url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full bg-[var(--overlay-light)] hover:bg-[var(--overlay-light)] text-[var(--text-on-overlay)] hover:text-[var(--text-on-overlay-hover)] transition-all duration-300 backdrop-blur-sm" title="Live Demo">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )}
-              {project.github_url && (
-                <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-full bg-[var(--overlay-light)] hover:bg-[var(--overlay-light)] text-[var(--text-on-overlay)] hover:text-[var(--text-on-overlay-hover)] transition-all duration-300 backdrop-blur-sm" title="Source Code">
-                  <Github className="h-4 w-4" />
-                </a>
-              )}
-              <AlertDialogCancel asChild>
-                <button className="p-2 rounded-full bg-[var(--overlay-light)] hover:bg-[var(--overlay-light)] text-[var(--text-on-overlay)] hover:text-[var(--text-on-overlay-hover)] transition-all duration-300 backdrop-blur-sm" title="Close">
-                  <X className="h-4 w-4" />
-                </button>
-              </AlertDialogCancel>
-            </div>
-          </div>
-        </AlertDialogHeader>
-
-        <div className="flex flex-col h-[85vh] md:h-[80vh]">
-          <div
-            ref={containerRef}
-            className={`relative flex-1 bg-[var(--surface-bg)] flex items-center justify-center group overflow-hidden overscroll-contain ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-            onWheel={handleWheel}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={stopDragging}
-            onMouseLeave={stopDragging}
-            onDoubleClick={() => setZoomLevel(zoomLevel > 1 ? 1 : 2)}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/10 to-transparent opacity-50 pointer-events-none" />
+    <DetailDialog
+      open={isOpen}
+      onClose={onClose}
+      onCloseAutoFocus={() => {}}
+      title={project.title}
+      subtitle={project.category ?? "Project"}
+      badge={
+        (project.live_url || project.github_url) && (
+          <span className="inline-flex items-center gap-2">
+            {project.live_url && (
+              <a href={project.live_url} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                <ExternalLink className="h-3.5 w-3.5" />
+                Live demo
+              </a>
+            )}
+            {project.github_url && (
+              <a href={project.github_url} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                <Github className="h-3.5 w-3.5" />
+                Source
+              </a>
+            )}
+          </span>
+        )
+      }
+    >
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:gap-8">
+        {/* Image with the tech stack under it; the stack sits at the bottom so both columns end together */}
+        <div className="flex flex-col gap-5">
+          <div className="flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-xl bg-muted/10 ring-1 ring-border/40">
             {project.image_url ? (
-               <div className="relative w-full h-full flex items-center justify-center" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                <OptimizedImage
-                  src={project.image_url}
-                  alt={project.title}
-                  className={`select-none shadow-2xl pointer-events-none w-full h-full object-contain ${isDragging ? '' : 'transition-transform duration-700'}`}
-                  style={{
-                    transform: `translate(${position.x}px, ${position.y}px) scale(${zoomLevel})`,
-                    transformOrigin: 'center center',
-                    transitionTimingFunction: isDragging ? 'none' : 'cubic-bezier(0.19, 1, 0.22, 1)'
-                  }}
-                  draggable={false}
-                  fallbackIcon={<FolderOpen className="h-20 w-20 text-muted-foreground/30" />}
-                />
-              </div>
+              <OptimizedImage
+                src={project.image_url}
+                alt={project.title}
+                className="h-full w-full select-none object-contain"
+                draggable={false}
+                fallbackIcon={<FolderOpen className="h-12 w-12 text-muted-foreground/30" />}
+              />
             ) : (
-              <div className="flex flex-col items-center gap-4 text-muted-foreground/30">
-                <FolderOpen className="h-20 w-20" />
-                <span className="text-sm font-medium">No Image Available</span>
-              </div>
-            )}
-
-            {/* Zoom controls */}
-            {project.image_url && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); const z = Math.max(zoomLevel - 0.25, 1); setZoomLevel(z); if (z === 1) setPosition({ x: 0, y: 0 }); }}
-                  className="p-1.5 rounded-full bg-[var(--overlay-light)] backdrop-blur-sm text-[var(--text-on-overlay)] hover:text-[var(--text-on-overlay-hover)] transition-all duration-200 border border-border/20"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <div className="bg-[var(--overlay-light)] backdrop-blur-sm text-[var(--text-on-overlay)] text-xs px-3 py-1.5 rounded-full border border-border/20 pointer-events-none min-w-[52px] text-center">
-                  {Math.round(zoomLevel * 100)}%
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setZoomLevel(Math.min(zoomLevel + 0.25, 4)); }}
-                  className="p-1.5 rounded-full bg-[var(--overlay-light)] backdrop-blur-sm text-[var(--text-on-overlay)] hover:text-[var(--text-on-overlay-hover)] transition-all duration-200 border border-border/20"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
+              <div className="flex flex-col items-center gap-2 text-muted-foreground/30">
+                <FolderOpen className="h-12 w-12" strokeWidth={1.5} />
+                <span className="text-[10px] font-medium uppercase tracking-widest">No Preview</span>
               </div>
             )}
           </div>
 
-          <div className="shrink-0 bg-background border-t border-border/10 px-6 py-5 md:px-8 md:py-6">
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">{project.description}</p>
-              <div className="flex flex-wrap gap-2">
-                {project.technologies.map((tech, idx) => (
-                  <Badge key={idx} variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">{tech}</Badge>
-                ))}
-              </div>
-            </div>
-          </div>
+          {project.technologies.length > 0 && (
+            <DetailBlock title="Tech stack" className="mt-auto">
+              <TagList items={project.technologies} />
+            </DetailBlock>
+          )}
         </div>
-      </AlertDialogContent>
-    </AlertDialog>
+
+        <DetailBlock title="About this project">
+          <p className="text-sm font-medium leading-relaxed text-foreground">{project.description}</p>
+          {about.length > 0 && (
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              {about.map((paragraph, idx) => (
+                <p key={idx}>{paragraph}</p>
+              ))}
+            </div>
+          )}
+        </DetailBlock>
+      </div>
+
+    </DetailDialog>
   );
 }

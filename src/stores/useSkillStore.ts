@@ -58,6 +58,8 @@ const DEFAULT_CATEGORIES: SkillCategory[] = [
   { title: "Deployment & Cloud", icon: Cloud, color: "text-cyan-300", skills: ["Vercel", "Netlify", "Railway", "Firebase", "Convex"] },
   { title: "Databases", icon: TestTube, color: "text-sky-300", skills: ["MySQL", "PostgreSQL", "Firebase", "Convex"] },
   { title: "Version Control", icon: GitBranch, color: "text-navy-300", skills: ["Git", "GitHub", "GitLab"] },
+  { title: "AI-Assisted Development", icon: Cpu, color: "text-cyan-400", skills: ["Agentic Coding", "Prompt Engineering", "Context Engineering", "Spec-Driven Development", "AI Code Review"] },
+  { title: "AI Integration", icon: Layers, color: "text-sky-400", skills: ["Gemini API", "AI Chatbots", "LLM APIs", "Prompt Design"] },
 ];
 
 function mapRowToCategory(row: SkillCategoryRow): SkillCategory {

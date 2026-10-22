@@ -279,15 +279,13 @@ export function ContactSection() {
                       <a
                         key={idx}
                         href={info.href}
-                        className="flex items-start gap-3 sm:gap-4 group transition-all duration-300 hover:translate-x-2"
+                        className="block group transition-all duration-300 hover:translate-x-2"
                       >
-                        <div className={cn("p-2.5 sm:p-3 rounded-lg bg-muted/10 border border-border/10 group-hover:border-primary/30 group-hover:bg-primary/10 transition-colors shrink-0", info.color)}>
-                          <info.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                        <div className="flex items-center gap-2 sm:gap-2.5">
+                          <info.icon className={cn("w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0", info.color)} />
+                          <p className="text-xs sm:text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">{info.label}</p>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5 sm:mb-1 group-hover:text-primary transition-colors">{info.label}</p>
-                          <p className="text-sm sm:text-lg text-white font-medium break-words" title={info.value}>{info.value}</p>
-                        </div>
+                        <p className="mt-2 text-sm sm:text-lg text-white font-medium break-words" title={info.value}>{info.value}</p>
                       </a>
                     ))}
                   </div>
