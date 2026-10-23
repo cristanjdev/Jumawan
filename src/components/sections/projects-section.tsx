@@ -12,8 +12,9 @@ import { convexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
 import { Button } from "@/components/ui/button";
 import { TechIcons } from "@/components/ui/tech-icons";
+import { useTechIcon } from "@/hooks/use-tech-icon";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
-import { ExternalLink, FolderOpen, Github } from "lucide-react";
+import { ExternalLink, FolderOpen, Github, Search } from "lucide-react";
 import { DetailBlock, DetailDialog, TagList } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
 import { useLenis } from "lenis/react";
@@ -424,6 +425,9 @@ function SeeAllProjectsModal({
   onSelect: (index: number) => void;
 }) {
   const lenis = useLenis();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All");
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -439,67 +443,123 @@ function SeeAllProjectsModal({
     };
   }, [isOpen, lenis]);
 
+  // Start from the full list every time the modal opens
+  useEffect(() => {
+    if (isOpen) { setQuery(""); setCategory("All"); }
+  }, [isOpen]);
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    projects.forEach((p) => { if (p.category) counts.set(p.category, (counts.get(p.category) ?? 0) + 1); });
+    return [["All", projects.length] as const, ...Array.from(counts.entries()).sort((a, b) => b[1] - a[1])];
+  }, [projects]);
+
+  // Keep each project's index in the full list: that is what the detail modal opens
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return projects
+      .map((project, index) => ({ project, index }))
+      .filter(({ project }) => category === "All" || project.category === category)
+      .filter(({ project }) => !q || [project.title, project.description, project.category, ...project.technologies].some((t) => t?.toLowerCase().includes(q)));
+  }, [projects, query, category]);
+
+  useEffect(() => { gridRef.current?.scrollTo({ top: 0 }); }, [query, category]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl border-[var(--border-subtle)] bg-[var(--surface-modal)] backdrop-blur-2xl !p-0 !gap-0 [&>button]:z-20 rounded-2xl md:rounded-3xl shadow-2xl">
-        <div className="flex flex-col h-[85svh] md:h-[80vh] overflow-hidden rounded-2xl md:rounded-3xl" data-lenis-prevent>
-          <div className="relative shrink-0 px-5 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-[var(--border-subtle)] bg-[var(--surface-bg-alt)]">
+      <DialogContent className="w-[95vw] max-w-5xl border-[var(--border-subtle)] bg-[var(--surface-modal)] backdrop-blur-2xl !p-0 !gap-0 [&>button]:z-20 rounded-2xl md:rounded-3xl shadow-2xl">
+        <div className="flex flex-col h-[85svh] md:h-[82vh] overflow-hidden rounded-2xl md:rounded-3xl" data-lenis-prevent>
+          <div className="relative shrink-0 space-y-4 px-5 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-[var(--border-subtle)] bg-[var(--surface-bg-alt)]">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent rounded-t-2xl md:rounded-t-3xl" />
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl font-bold text-foreground">
-                All Projects ({projects.length})
+                All Projects <span className="font-medium text-muted-foreground/60">({projects.length})</span>
               </DialogTitle>
             </DialogHeader>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide sm:pb-0" role="tablist" aria-label="Filter projects by type">
+                {categories.map(([name, count]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    role="tab"
+                    aria-selected={category === name}
+                    onClick={() => setCategory(name)}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      category === name
+                        ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
+                        : "border-border/50 text-muted-foreground hover:border-cyan-400/40 hover:text-foreground"
+                    }`}
+                  >
+                    {name} <span className="opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative sm:w-60">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search projects or tech"
+                  aria-label="Search projects"
+                  className="h-9 w-full rounded-lg border border-border/50 bg-background/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-400/60 focus:outline-none"
+                />
+              </div>
+            </div>
           </div>
 
           <div
+            ref={gridRef}
             className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-6 bg-[var(--surface-bg-alt)] overscroll-contain scroll-smooth scrollbar-hide"
             style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
           >
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pb-12">
-              {projects.map((project, index) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => onSelect(index)}
-                  className="group text-left rounded-xl border border-border/40 overflow-hidden hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-500 bg-background/40 backdrop-blur-sm"
-                >
-                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/10">
-                    {project.image_url ? (
-                      <OptimizedImage
-                        src={project.image_url}
-                        alt={project.title}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        draggable={false}
-                        fallbackIcon={<FolderOpen className="h-8 w-8 text-muted-foreground/30" />}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FolderOpen className="h-8 w-8 text-muted-foreground/30" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  </div>
-                  <div className="p-3 sm:p-4 min-h-[80px] sm:min-h-[90px] flex flex-col justify-start">
-                    <p className="text-xs sm:text-sm font-bold text-foreground leading-tight line-clamp-2 group-hover:text-cyan-400 transition-colors duration-300">
-                      {project.title}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {project.technologies.slice(0, 2).map((tech, i) => (
-                        <span key={i} className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary/80 font-medium whitespace-nowrap">
-                          {tech}
-                        </span>
-                      ))}
-                      {project.technologies.length > 2 && (
-                        <span className="text-[9px] sm:text-[10px] text-muted-foreground/40 font-medium">
-                          +{project.technologies.length - 2}
-                        </span>
+            {visible.length === 0 ? (
+              <p className="py-16 text-center text-sm text-muted-foreground/70">No projects match your search.</p>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pb-12">
+                {visible.map(({ project, index }) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => onSelect(index)}
+                    className="group flex flex-col text-left rounded-xl border border-border/40 overflow-hidden hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-500 bg-background/40 backdrop-blur-sm"
+                  >
+                    <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/10">
+                      {project.image_url ? (
+                        <OptimizedImage
+                          src={project.image_url}
+                          alt={project.title}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          draggable={false}
+                          fallbackIcon={<FolderOpen className="h-8 w-8 text-muted-foreground/30" />}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FolderOpen className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
                       )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                    <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
+                      <div>
+                        <p className="text-xs sm:text-sm font-bold text-foreground leading-tight line-clamp-2 group-hover:text-cyan-400 transition-colors duration-300">
+                          {project.title}
+                        </p>
+                        {(project.category || project.year) && (
+                          <p className="mt-1 text-[10px] sm:text-[11px] text-muted-foreground/60">
+                            {[project.category, project.year].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <TechIcons technologies={project.technologies} limit={7} className="mt-auto" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -521,6 +581,7 @@ export function ProjectsModal({
 }) {
   // Hold on to the last project while closing so the exit animation still has content
   const project = useLatest(selectedIndex !== null ? projects[selectedIndex] ?? null : null);
+  const techIcon = useTechIcon();
   if (!project) return null;
 
   const about = project.about?.split(/\n{2,}/).filter(Boolean) ?? [];
@@ -575,7 +636,7 @@ export function ProjectsModal({
 
           {project.technologies.length > 0 && (
             <DetailBlock title="Tech stack" className="mt-auto">
-              <TagList items={project.technologies} />
+              <TagList items={project.technologies} icon={techIcon} />
             </DetailBlock>
           )}
         </div>

@@ -1,10 +1,6 @@
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useTechIcon } from "@/hooks/use-tech-icon";
 import { cn } from "@/lib/utils";
-
-// "Next.js", "NextJS" and "next js" are the same technology
-const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/js$/, "");
 
 /**
  * A project's technologies as a compact row of plain icons. The icons come from the Tools &
@@ -12,28 +8,27 @@ const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "").repla
  * every card; a technology that is not in the list simply has no icon here. Every icon is shown;
  * the row only wraps when a stack is longer than the card is wide.
  */
-export function TechIcons({ technologies, className }: { technologies: string[]; className?: string }) {
-  const tools = useQuery(api.tools.listActive);
+export function TechIcons({ technologies, className, limit }: { technologies: string[]; className?: string; limit?: number }) {
+  const iconFor = useTechIcon();
 
   const icons = useMemo(() => {
-    const byName = new Map<string, { name: string; icon: string }>();
-    tools?.forEach((tool) => {
-      if (!byName.has(key(tool.name))) byName.set(key(tool.name), { name: tool.name, icon: tool.icon_url });
-    });
     const seen = new Set<string>();
     return technologies.flatMap((tech) => {
-      const tool = byName.get(key(tech));
-      if (!tool || seen.has(tool.icon)) return [];
-      seen.add(tool.icon);
-      return [{ name: tech, icon: tool.icon }];
+      const icon = iconFor(tech);
+      if (!icon || seen.has(icon)) return [];
+      seen.add(icon);
+      return [{ name: tech, icon }];
     });
-  }, [tools, technologies]);
+  }, [iconFor, technologies]);
 
   if (icons.length === 0) return null;
 
+  const shown = limit ? icons.slice(0, limit) : icons;
+  const hidden = icons.length - shown.length;
+
   return (
     <div className={cn("flex flex-wrap items-center gap-x-2 gap-y-1.5 xl:gap-x-2.5", className)}>
-      {icons.map(({ name, icon }) => (
+      {shown.map(({ name, icon }) => (
         <img
           key={name}
           src={icon}
@@ -46,6 +41,7 @@ export function TechIcons({ technologies, className }: { technologies: string[];
           className="h-3.5 w-3.5 shrink-0 object-contain drop-shadow-md sm:h-4 sm:w-4 xl:h-[18px] xl:w-[18px] dark:drop-shadow-[0_0_1.5px_rgba(255,255,255,0.85)]"
         />
       ))}
+      {hidden > 0 && <span className="text-[10px] font-medium text-muted-foreground/60">+{hidden}</span>}
     </div>
   );
 }

@@ -337,14 +337,28 @@ export function BulletList({ items, tone }: { items: string[]; tone: "primary" |
   );
 }
 
-export function TagList({ items }: { items: string[] }) {
+export function TagList({ items, icon }: { items: string[]; icon?: (item: string) => string | undefined }) {
   return (
     <ul className="flex flex-wrap gap-1.5">
-      {items.map((item) => (
-        <li key={item} className={tagClass}>
-          {item}
-        </li>
-      ))}
+      {items.map((item) => {
+        const src = icon?.(item);
+        return (
+          <li key={item} className={cn(tagClass, src && "inline-flex items-center gap-1.5")}>
+            {src && (
+              <img
+                src={src}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                // Same light edge as the card icons so black logos stay visible on the dark theme
+                className="h-3.5 w-3.5 shrink-0 object-contain dark:drop-shadow-[0_0_1.5px_rgba(255,255,255,0.85)]"
+              />
+            )}
+            {item}
+          </li>
+        );
+      })}
     </ul>
   );
 }

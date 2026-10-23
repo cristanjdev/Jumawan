@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Briefcase } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TechIcons } from "@/components/ui/tech-icons";
+import { useTechIcon } from "@/hooks/use-tech-icon";
 import {
   BulletList,
   DetailBlock,
@@ -70,6 +71,7 @@ function ExperienceDialog({
 }) {
   // Hold on to the last role while closing so the exit animation and focus return still run
   const exp = useLatest(experience);
+  const techIcon = useTechIcon();
   if (!exp) return null;
 
   const { highlights, duties } = splitLists(exp);
@@ -115,7 +117,7 @@ function ExperienceDialog({
 
         {stack.length > 0 && (
           <DetailBlock title="Tech stack">
-            <TagList items={stack} />
+            <TagList items={stack} icon={techIcon} />
           </DetailBlock>
         )}
       </MediaSplit>
