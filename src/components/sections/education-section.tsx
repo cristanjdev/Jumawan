@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
-import { DetailBlock, DetailCard, DetailDialog, FactsRow, StatusPill, TagList } from "@/components/ui/detail-card";
+import { DetailBlock, DetailCard, DetailDialog, MediaSplit, StatusPill, TagList } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
 import { useReturnFocus } from "@/hooks/use-return-focus";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
@@ -73,51 +73,57 @@ function EducationDialog({
       // Honors already show in this badge ("Graduated with Honors")
       badge={edu.status && <StatusPill>{statusLabel(edu)}</StatusPill>}
     >
-      <FactsRow
+      <MediaSplit
+        src={edu.image_url}
+        alt={`${edu.degree} at ${edu.school}`}
         facts={[
           ["Years attended", edu.period],
           ["Level", edu.level],
           ["GPA", edu.gpa],
           ["Location", edu.location],
         ]}
-      />
+      >
+        {edu.description && (
+          <p className="text-[13px] leading-normal text-foreground/80 sm:text-sm sm:leading-relaxed">{edu.description}</p>
+        )}
 
-      {edu.description && (
-        <p className="mt-5 text-[13px] leading-normal text-foreground/80 sm:mt-6 sm:text-sm sm:leading-relaxed">{edu.description}</p>
-      )}
+        {next && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground sm:text-sm">
+            <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
+            Continued to <span className="font-medium text-foreground">{next.degree}</span>
+            <span className="tabular-nums">({next.period})</span>
+          </p>
+        )}
 
-      {next && (
-        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground sm:text-sm">
-          <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary" />
-          Continued to <span className="font-medium text-foreground">{next.degree}</span>
-          <span className="tabular-nums">({next.period})</span>
-        </p>
-      )}
+        {groups.length > 0 && (
+          <div className={cn("grid gap-5 sm:gap-6", groups.length > 1 && !edu.image_url && "md:grid-cols-2 md:gap-10")}>
+            {groups.map(({ group, items }) => (
+              <DetailBlock key={group} title={group}>
+                <Ledger items={items} />
+              </DetailBlock>
+            ))}
+          </div>
+        )}
 
-      {groups.length > 0 && (
-        <div className={cn("mt-5 grid gap-5 sm:mt-6 sm:gap-6", groups.length > 1 && "md:grid-cols-2 md:gap-10")}>
-          {groups.map(({ group, items }) => (
-            <DetailBlock key={group} title={group}>
-              <Ledger items={items} />
-            </DetailBlock>
-          ))}
-        </div>
-      )}
-
-      {edu.coursework.length > 0 && (
-        <DetailBlock title="Key coursework" className="mt-5 sm:mt-6">
-          <TagList items={edu.coursework} />
-        </DetailBlock>
-      )}
+        {edu.coursework.length > 0 && (
+          <DetailBlock title="Key coursework">
+            <TagList items={edu.coursework} />
+          </DetailBlock>
+        )}
+      </MediaSplit>
     </DetailDialog>
   );
 }
 
 export function EducationSection() {
-  const { education } = useEducationStore();
+  const { education, fetchEducation } = useEducationStore();
   const [selected, setSelected] = useState<Education | null>(null);
   const { remember, onCloseAutoFocus } = useReturnFocus();
   useScrollLock(selected !== null);
+
+  useEffect(() => {
+    fetchEducation();
+  }, [fetchEducation]);
 
   const open = (edu: Education) => {
     remember();
@@ -148,7 +154,7 @@ export function EducationSection() {
                   details={edu.location}
                   tags={edu.coursework}
                   tagsLabel="Key coursework"
-                  media={{ alt: edu.school, badge: edu.level }}
+                  media={{ src: edu.image_url, alt: edu.school, badge: edu.level }}
                   onOpen={() => open(edu)}
                 />
               </motion.div>

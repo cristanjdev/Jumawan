@@ -10,7 +10,7 @@ import {
   DetailBlock,
   DetailCard,
   DetailDialog,
-  FactsRow,
+  MediaSplit,
   StatusPill,
   TagList,
 } from "@/components/ui/detail-card";
@@ -86,16 +86,9 @@ function ExperienceDialog({
       subtitle={exp.company}
       badge={exp.current && <StatusPill>Current</StatusPill>}
     >
-      {exp.image_url && (
-        <img
-          src={exp.image_url}
-          alt={`${exp.position} at ${exp.company}`}
-          className="mb-5 aspect-[16/9] w-full rounded-xl object-cover sm:mb-6"
-          draggable={false}
-        />
-      )}
-
-      <FactsRow
+      <MediaSplit
+        src={exp.image_url}
+        alt={`${exp.position} at ${exp.company}`}
         facts={[
           ["Period", formatPeriod(exp)],
           ["Duration", exp.duration],
@@ -104,28 +97,28 @@ function ExperienceDialog({
           ["Team", exp.team_size],
           ["Company size", companySize],
         ]}
-      />
+      >
+        {(highlights.length > 0 || duties.length > 0) && (
+          <div className={cn("grid gap-5 sm:gap-6", !exp.image_url && highlights.length > 0 && duties.length > 0 && "md:grid-cols-2 md:gap-10")}>
+            {highlights.length > 0 && (
+              <DetailBlock title="Highlights">
+                <BulletList items={highlights} tone="primary" />
+              </DetailBlock>
+            )}
+            {duties.length > 0 && (
+              <DetailBlock title="Responsibilities">
+                <BulletList items={duties} tone="muted" />
+              </DetailBlock>
+            )}
+          </div>
+        )}
 
-      {(highlights.length > 0 || duties.length > 0) && (
-        <div className={cn("mt-5 grid gap-5 sm:mt-6 sm:gap-6", highlights.length > 0 && duties.length > 0 && "md:grid-cols-2 md:gap-10")}>
-          {highlights.length > 0 && (
-            <DetailBlock title="Highlights">
-              <BulletList items={highlights} tone="primary" />
-            </DetailBlock>
-          )}
-          {duties.length > 0 && (
-            <DetailBlock title="Responsibilities">
-              <BulletList items={duties} tone="muted" />
-            </DetailBlock>
-          )}
-        </div>
-      )}
-
-      {stack.length > 0 && (
-        <DetailBlock title="Tech stack" className="mt-5 sm:mt-6">
-          <TagList items={stack} />
-        </DetailBlock>
-      )}
+        {stack.length > 0 && (
+          <DetailBlock title="Tech stack">
+            <TagList items={stack} />
+          </DetailBlock>
+        )}
+      </MediaSplit>
     </DetailDialog>
   );
 }

@@ -247,6 +247,61 @@ export function FactsRow({ facts }: { facts: [string, string | null | undefined]
   );
 }
 
+/**
+ * Facts plus the details. With a photo the photo and facts sit in a left column beside the details,
+ * so the dialog fits a laptop screen whole; without one the facts run in a row above the details.
+ */
+export function MediaSplit({
+  src,
+  alt,
+  facts,
+  children,
+}: {
+  src?: string;
+  alt: string;
+  facts: [string, string | null | undefined][];
+  children: ReactNode;
+}) {
+  if (!src) {
+    return (
+      <>
+        <FactsRow facts={facts} />
+        <div className="mt-5 space-y-5 sm:mt-6 sm:space-y-6">{children}</div>
+      </>
+    );
+  }
+
+  // Both columns end on the same line: the photo takes whatever height the details leave, the facts sit under it
+  // as a ruled list, and the last detail block (tech stack, coursework) is pushed to the bottom of its column
+  return (
+    <div className="grid gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-8">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-muted/20 md:aspect-auto md:min-h-[13rem] md:flex-1">
+          <img src={src} alt={alt} className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+        </div>
+        <FactsList facts={facts} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-5 sm:gap-6 [&>:last-child]:mt-auto">{children}</div>
+    </div>
+  );
+}
+
+/** Label on the left, value on the right, ruled rows: the facts as a record */
+export function FactsList({ facts }: { facts: [string, string | null | undefined][] }) {
+  return (
+    <dl>
+      {facts
+        .filter((fact): fact is [string, string] => Boolean(fact[1]))
+        .map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-6 border-b border-border/40 py-2 last:border-0 last:pb-0">
+            <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 text-right text-sm font-medium text-foreground">{value}</dd>
+          </div>
+        ))}
+    </dl>
+  );
+}
+
 /** Section heading; children are the content below it */
 export function DetailBlock({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (

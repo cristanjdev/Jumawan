@@ -13,6 +13,7 @@ import type * as analytics from "../analytics.js";
 import type * as certificates from "../certificates.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as dashboard from "../dashboard.js";
+import type * as education from "../education.js";
 import type * as files from "../files.js";
 import type * as heroSettings from "../heroSettings.js";
 import type * as http from "../http.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   certificates: typeof certificates;
   contactMessages: typeof contactMessages;
   dashboard: typeof dashboard;
+  education: typeof education;
   files: typeof files;
   heroSettings: typeof heroSettings;
   http: typeof http;

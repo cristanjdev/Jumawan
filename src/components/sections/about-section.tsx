@@ -116,18 +116,20 @@ export function AboutSection() {
                                                     <div className="relative w-full h-full">
                                                         <img
                                                             src={item.src}
-                                                            alt={item.label}
+                                                            alt={item.label || "About me photo"}
                                                             loading="lazy"
                                                             decoding="async"
                                                             className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 42vw"
                                                         />
                                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
-                                                        <div className="absolute bottom-6 left-6">
-                                                            <span className="text-white/90 font-medium text-sm tracking-wider uppercase border-l-2 border-primary pl-3">
-                                                                {item.label}
-                                                            </span>
-                                                        </div>
+                                                        {item.label && (
+                                                            <div className="absolute bottom-6 left-6">
+                                                                <span className="text-white/90 font-medium text-sm tracking-wider uppercase border-l-2 border-primary pl-3">
+                                                                    {item.label}
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </CarouselItem>
                                             ))}

@@ -43,10 +43,10 @@ export const useAboutSectionStore = create<AboutSectionState>((set) => ({
     },
 }));
 
-/** Carousel items for About section: from API or static fallback. */
+/** Carousel items for About section: from API or static fallback. A photo with no label shows no caption. */
 export function getAboutCarouselItems(images: AboutSectionImage[]): { id: string; src: string; label: string }[] {
     if (images.length > 0) {
-        return images.map((img) => ({ id: img.id || img._id, src: img.image_url, label: img.label || 'Slide' }));
+        return images.map((img) => ({ id: img.id || img._id, src: img.image_url, label: img.label?.trim() ?? '' }));
     }
     return DEFAULT_CAROUSEL_ITEMS.map((item, i) => ({ id: `fallback-${i}`, src: item.src, label: item.label }));
 }
