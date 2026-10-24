@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Briefcase } from "lucide-react";
+import { Briefcase, CircleDot, GraduationCap, Laptop, type LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TechIcons } from "@/components/ui/tech-icons";
 import { useTechIcon } from "@/hooks/use-tech-icon";
@@ -12,7 +12,7 @@ import {
   DetailCard,
   DetailDialog,
   MediaSplit,
-  StatusPill,
+  StatusMark,
   TagList,
 } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
@@ -50,6 +50,16 @@ function formatPeriod(exp: WorkExperience) {
 
 const normalize = (text: string) => text.trim().toLowerCase();
 
+/** One icon per employment type, so the three cards read apart at a glance */
+const TYPE_ICONS: Record<string, LucideIcon> = { "full-time": Briefcase, freelance: Laptop, internship: GraduationCap };
+
+/** A street address trimmed to its city and province for the card ("…, Cagayan de Oro City, Misamis Oriental"); the modal keeps it whole */
+function shortLocation(location?: string) {
+  if (!location) return undefined;
+  const parts = location.split(",").map((part) => part.trim()).filter((part) => part && !/^philippines$/i.test(part));
+  return parts.length > 2 ? parts.slice(-2).join(", ") : parts.join(", ");
+}
+
 /** Highlights plus responsibilities with the lines the admin data repeats removed */
 function splitLists(exp: WorkExperience) {
   const highlights = exp.achievements ?? [];
@@ -86,7 +96,7 @@ function ExperienceDialog({
       onCloseAutoFocus={onCloseAutoFocus}
       title={exp.position}
       subtitle={exp.company}
-      badge={exp.current && <StatusPill>Current</StatusPill>}
+      badge={exp.current && <StatusMark icon={CircleDot}>Current</StatusMark>}
     >
       <MediaSplit
         src={exp.image_url}
@@ -168,14 +178,14 @@ export function ExperienceSection() {
   };
 
   return (
-    <section id="experience" className="relative overflow-hidden py-24">
+    <section id="experience" className="relative overflow-hidden py-14 sm:py-24">
       <div className="container relative z-10 px-4 md:px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div {...reveal} className="mx-auto mb-14 flex w-fit flex-col items-center sm:mb-16">
-            <h2 className="mb-4 text-center text-4xl font-bold md:text-5xl">
+            <h2 className="mb-4 text-center text-[clamp(1.5rem,7.2vw,2.25rem)] font-bold md:text-5xl">
               <span className="text-cyan-400">Work Experience</span>
             </h2>
-            <p className="mx-auto max-w-2xl text-center text-lg font-medium text-muted-foreground">
+            <p className="mx-auto max-w-2xl text-center text-base sm:text-lg font-medium text-muted-foreground">
               My professional journey and career milestones
             </p>
           </motion.div>
@@ -201,13 +211,13 @@ export function ExperienceSection() {
                 >
                   <DetailCard
                     period={formatPeriod(exp)}
-                    badge={exp.current && <StatusPill>Current</StatusPill>}
+                    badge={exp.type && <StatusMark icon={TYPE_ICONS[normalize(exp.type)] ?? Briefcase}>{exp.type}</StatusMark>}
                     title={exp.position}
                     subtitle={exp.company}
-                    details={exp.location}
+                    details={shortLocation(exp.location)}
                     tags={exp.technologies ?? []}
                     tagsLabel="Tech stack"
-                    media={{ src: exp.image_url, alt: `${exp.position} at ${exp.company}`, badge: exp.type }}
+                    media={{ src: exp.image_url, alt: `${exp.position} at ${exp.company}` }}
                     icons={<TechIcons technologies={exp.technologies ?? []} />}
                     onOpen={() => open(exp)}
                   />

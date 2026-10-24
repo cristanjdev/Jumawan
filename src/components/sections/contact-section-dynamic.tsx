@@ -143,7 +143,7 @@ export function ContactSection() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-cyan-400 mb-6">
+            <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl lg:text-6xl font-bold text-cyan-400 mb-6">
               Let's Start a Conversation
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto text-lg font-medium">

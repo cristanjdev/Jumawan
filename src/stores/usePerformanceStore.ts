@@ -3,12 +3,16 @@ import { create } from 'zustand';
 /**
  * Adaptive performance tiers.
  *
- * - high:   full effects (smooth wheel scrolling, parallax, animated nebula/glows, all hero decor)
+ * - high:   full effects (parallax, animated nebula/glows, all hero decor)
  * - medium: keeps motion but drops the paint-heavy loops (animated blurs, box-shadow breathing)
- * - low:    native scrolling, no parallax, no blur/backdrop-filter, decorative loops off
+ * - low:    no parallax, no blur/backdrop-filter, decorative loops off
+ *
+ * Smooth wheel scrolling runs on every tier; only the OS reduced-motion setting turns it off.
  *
  * The initial tier comes from hardware hints; a lightweight frame monitor then
- * downgrades (never upgrades) if the device can't keep up in practice.
+ * downgrades (never upgrades) if the device can't keep up in practice. It only ever steps
+ * down to `medium`: `low` (no parallax or blur) is for devices the hardware hints
+ * flag as weak, or a deliberate `?perf=low`, so a slow page load can't strip the effects.
  * Override for testing with `?perf=low|medium|high` (`?perf=auto` clears it).
  */
 export type PerfTier = 'low' | 'medium' | 'high';
@@ -91,7 +95,7 @@ export const usePerformanceStore = create<PerformanceState>((set) => ({
  */
 const startFrameMonitor = () => {
   const WINDOW_MS = 1000;
-  const SLOW_FRAME_MS = 25; // averaging slower than ~40fps
+  const SLOW_FRAME_MS = 33; // averaging slower than ~30fps
   const BAD_WINDOWS_TO_DOWNGRADE = 3;
   const SCROLL_GRACE_MS = 1500;
 
@@ -109,7 +113,8 @@ const startFrameMonitor = () => {
 
   const tick = (now: number) => {
     const { tier, setTier } = usePerformanceStore.getState();
-    if (tier === 'low') {
+    // The monitor only steps high -> medium; medium and low are left as they are
+    if (tier !== 'high') {
       stop();
       return;
     }
@@ -153,7 +158,7 @@ const startFrameMonitor = () => {
   };
 
   const onScroll = () => {
-    if (usePerformanceStore.getState().tier === 'low') {
+    if (usePerformanceStore.getState().tier !== 'high') {
       window.removeEventListener('scroll', onScroll);
       return;
     }
@@ -171,11 +176,12 @@ export const initPerformanceTier = () => {
 
   const override = readOverride();
 
+  // Only a measured `medium` is kept; an older build could also save `low`, which would switch smooth scrolling off
   const sessionTier = safeGet(() => sessionStorage, SESSION_KEY);
   const detected = detectTier();
   // A downgrade measured earlier this session wins over the optimistic hardware guess
   const initial = override
-    ?? (isTier(sessionTier) && TIERS.indexOf(sessionTier) < TIERS.indexOf(detected) ? sessionTier : detected);
+    ?? (sessionTier === 'medium' && detected === 'high' ? sessionTier : detected);
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   const { setTier, setReduceMotion } = usePerformanceStore.getState();
@@ -183,7 +189,7 @@ export const initPerformanceTier = () => {
   setReduceMotion(reducedMotionQuery.matches);
   reducedMotionQuery.addEventListener('change', (e) => setReduceMotion(e.matches));
 
-  if (!override && initial !== 'low') {
+  if (!override && initial === 'high') {
     const begin = () => window.setTimeout(startFrameMonitor, 1000);
     if (document.readyState === 'complete') begin();
     else window.addEventListener('load', begin, { once: true });

@@ -623,18 +623,19 @@ export function ToolsCarousel() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Every screen size gets the 3D orbit (it lays itself out for narrow screens) unless the device is on
-  // the low performance tier or WebGL fails; then phones get the marquee and desktops the 2D orbit
+  // Every screen size and performance tier gets the 3D orbit (it lays itself out for narrow screens and
+  // only renders while on screen); the low tier just gets its lighter "medium" quality. Only when WebGL
+  // fails do phones get the marquee and desktops the 2D orbit.
   const { tier, reduceMotion } = useMotionBudget();
   const [webglFailed, setWebglFailed] = useState(false);
-  const use3D = tier !== "low" && !webglFailed;
+  const use3D = !webglFailed;
   const rings = useMemo(() => [innerRing, middleRing, outerRing], [innerRing, middleRing, outerRing]);
 
   return (
     <section
       ref={containerRef}
       id="tools"
-      className={`py-20 sm:py-24 relative overflow-hidden bg-transparent flex flex-col items-center justify-center ${use3D ? "" : "min-h-[600px] md:min-h-[1000px]"}`}
+      className={`py-12 sm:py-24 relative overflow-hidden bg-transparent flex flex-col items-center justify-center ${use3D ? "" : "min-h-[600px] md:min-h-[1000px]"}`}
     >
       <motion.div 
         className="container mx-auto px-4 relative z-10 flex flex-col items-center"
@@ -651,10 +652,10 @@ export function ToolsCarousel() {
           transition={{ duration: 0.9, ease: "easeOut" }}
         >
           <div className="flex flex-col items-center mx-auto w-fit">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 mb-4 text-center">
+            <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl font-bold text-cyan-400 mb-4 text-center">
               Tools & Technologies
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
               The technologies and tools I use to build exceptional digital experiences
             </p>
           </div>

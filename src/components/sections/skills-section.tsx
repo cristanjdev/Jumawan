@@ -37,7 +37,7 @@ export function SkillsSection() {
   }), []);
 
   return (
-    <section id="skills" className="py-24 relative overflow-hidden">
+    <section id="skills" className="py-14 sm:py-24 relative overflow-hidden">
       <div className="container px-4 md:px-6 relative z-10">
         <motion.div
           initial="hidden"
@@ -49,12 +49,12 @@ export function SkillsSection() {
           {/* Header - Centered to match Certificates */}
           <motion.div variants={itemVariants} className="flex flex-col items-center mb-16 mx-auto w-fit"
           >
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
+            <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl font-bold mb-4 text-center">
               <span className="text-cyan-400">
                 My Skills
               </span>
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
               A comprehensive overview of my technical expertise, and how I build with AI
             </p>
           </motion.div>

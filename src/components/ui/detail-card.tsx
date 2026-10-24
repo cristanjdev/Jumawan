@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, ImageIcon } from "lucide-react";
+import { ArrowRight, ImageIcon, type LucideIcon } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DialogBar } from "@/components/ui/dialog-bar";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { ViewDetailsHint } from "@/components/ui/view-details-hint";
-import { dialogShell } from "@/lib/section-ui";
+import { dialogShell, mediaLabel, mediaScrim } from "@/lib/section-ui";
 import { cn } from "@/lib/utils";
 
 // Shared pieces for the "summary card + details modal" sections (Work Experience, Education)
@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils";
 export const tagClass =
   "rounded-md bg-background/60 px-2 py-1 text-xs font-medium text-foreground/80 ring-1 ring-inset ring-border/40";
 
-/** Soft primary pill with a dot ("Current", "Graduated with Honors") */
-export function StatusPill({ children }: { children: ReactNode }) {
+/** A status as plain cyan text with a small icon, no container ("Current", "Graduated with Honors") */
+export function StatusMark({ children, icon: Icon }: { children: ReactNode; icon: LucideIcon }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold tracking-wide text-cyan-400">
+      <Icon aria-hidden className="h-3.5 w-3.5" strokeWidth={2.2} />
       {children}
     </span>
   );
@@ -68,6 +68,7 @@ function useFittingTags(tags: string[]) {
 
 export function DetailCard({
   period,
+  lead,
   badge,
   title,
   subtitle,
@@ -79,6 +80,9 @@ export function DetailCard({
   onOpen,
 }: {
   period: ReactNode;
+  /** Plain status on the left of the row ("Bachelor's degree"); the date range then moves to the right edge */
+  lead?: ReactNode;
+  /** Plain status on the right of the row, after the date range ("Full-time") */
   badge?: ReactNode;
   title: string;
   subtitle: string;
@@ -93,6 +97,7 @@ export function DetailCard({
 }) {
   const { rowRef, measureRef, count } = useFittingTags(icons ? [] : tags);
   const more = tags.length - count;
+  const dateRange = <span className="text-xs font-semibold uppercase tracking-wider tabular-nums text-muted-foreground">{period}</span>;
 
   const tagRow = (
     <div className="relative min-w-0 overflow-hidden">
@@ -136,16 +141,17 @@ export function DetailCard({
           )}
           <ViewDetailsHint />
           {media.badge && (
-            <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-[#fff] shadow-sm ring-1 ring-white/15 backdrop-blur-sm">
-              {media.badge}
-            </span>
+            <>
+              <span aria-hidden className={mediaScrim} />
+              <span className={mediaLabel}>{media.badge}</span>
+            </>
           )}
         </div>
       )}
       <div className="flex flex-1 flex-col p-6 sm:p-7">
-        <div className="flex min-h-6 items-center justify-between gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wider tabular-nums text-muted-foreground">{period}</span>
-          {badge}
+        <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          {lead ?? dateRange}
+          {lead ? dateRange : badge}
         </div>
 
         <h3 className="mt-3 font-heading text-xl font-semibold leading-snug tracking-tight text-foreground">
@@ -162,12 +168,14 @@ export function DetailCard({
       </div>
 
       {media ? (
-        // With an image on top the footer is just the tags or icons; "View Details" shows as a hover hint over the image
-        <div className="px-6 pb-6 sm:px-7 sm:pb-7">
-          <div className="min-w-0" aria-label={icons ? tagsLabel : undefined}>
-            {icons ?? tagRow}
+        // With an image on top the footer is just the tags or icons (none, no footer); "View Details" shows as a hover hint over the image
+        (icons || tags.length > 0) && (
+          <div className="px-6 pb-6 sm:px-7 sm:pb-7">
+            <div className="min-w-0" aria-label={icons ? tagsLabel : undefined}>
+              {icons ?? tagRow}
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="flex items-center justify-between gap-4 px-6 pb-6 sm:px-7 sm:pb-7">
           <div className="min-w-0 flex-1">{tagRow}</div>
@@ -196,8 +204,8 @@ export function DetailDialog({
   onClose: () => void;
   onCloseAutoFocus: (event: Event) => void;
   title: string;
-  /** Organisation, shown beside the title after a dot */
-  subtitle: string;
+  /** Organisation, shown beside the title after a dot; leave out when the details list carries it */
+  subtitle?: string;
   /** Status pill: right side of the header next to close; under the title on phones, where that corner is too tight */
   badge?: ReactNode;
   children: ReactNode;
@@ -205,15 +213,19 @@ export function DetailDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className={cn(dialogShell, "max-w-5xl")} onCloseAutoFocus={onCloseAutoFocus}>
-        <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
+        <div className="flex min-w-0 max-h-[calc(100dvh-2rem)] flex-col">
           <DialogBar
             inline
+            divider={false}
+            dot={Boolean(subtitle)}
             title={title}
             description={
-              <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                {subtitle}
-                {badge && <span className="sm:hidden">{badge}</span>}
-              </span>
+              (subtitle || badge) && (
+                <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  {subtitle}
+                  {badge && <span className="sm:hidden">{badge}</span>}
+                </span>
+              )
             }
             trailing={badge && <span className="mr-2 hidden sm:inline-flex">{badge}</span>}
           />

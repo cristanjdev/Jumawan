@@ -121,7 +121,11 @@ export default defineSchema({
       v.literal("badge"),
       v.literal("resume"),
       v.literal("profile_image"),
-      v.literal("hover_logo")
+      v.literal("hover_logo"),
+      // which 3D portrait the hero shows (value: one of PORTRAIT_STYLES in heroSettings.ts)
+      v.literal("portrait_style"),
+      // grayscale depth map of the profile photo, for the "depth" portrait style
+      v.literal("depth_map")
     ),
     value: v.string(),
     order_index: v.number(),

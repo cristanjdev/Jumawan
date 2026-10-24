@@ -49,7 +49,7 @@ const TURN_SECONDS = 6.5;
 
 const PALETTE = {
   line: "#01050d", // black outlines
-  lineLight: "#0a2f5c", // navy outlines on a light page
+  lineLight: "#0b6a96", // deep cyan-blue outlines on a light page
   navy: "#06183a", // dark glass
   deep: "#0d3fe0", // electric blue plasma
   cyan: "#2fc8ff", // main glow
@@ -241,13 +241,16 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
         col = mix(col, cCyan * .8, step(.8, h) * smoothstep(.35, 1., r) * .6);
         col = mix(col, cCyan * (.5 + h * .6), innerLight() * .6);
         col += cCyan * edge * .5;
-        // light page: sky-blue glass instead of dark navy (tinted enough to stand off a white page),
-        // same shards and inner light
-        vec3 pale = mix(vec3(.42, .70, .95), vec3(.22, .52, .88), h * .7);
-        pale = mix(pale, cCyan * .9 + .1, innerLight() * .4);
-        pale = mix(pale, vec3(.12, .45, .85), edge * .6);
+        // light page: translucent cyan glass. Pale aqua shards deepen toward the cube's corners and
+        // saturate along every face edge, the light from the core lifts the middle, and the glass is
+        // clearer there so the gem shows through
+        float depth = clamp(h * .45 + smoothstep(.3, 1., r) * .55, 0., 1.);
+        vec3 pale = mix(vec3(.62, .93, 1.), vec3(.06, .64, .90), depth);
+        pale = mix(pale, vec3(.86, .99, 1.), innerLight() * .6);
+        pale = mix(pale, vec3(0., .58, .86), edge * .85);
+        float paleA = mix(.80, .40, innerLight()) + h * .08 + edge * .25;
         col = mix(col, pale, uLight);
-        gl_FragColor = vec4(col, .94);
+        gl_FragColor = vec4(col, mix(.94, paleA, uLight));
         ${OUTPUT}
       }`,
       BackSide,
@@ -255,9 +258,7 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
   );
   back.renderOrder = ORDER;
 
-  const front = new Mesh(
-    cube,
-    additive(
+  const frontMaterial = additive(
       shader(
         FACE_PATTERN +
           /* glsl */ `
@@ -269,12 +270,18 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
                    + cLight * innerLight() * (.04 + step(.6, h) * .12)
                    + cLight * step(.88, h) * smoothstep(.45, 1., r) * .14
                    + cCyan * (rim * .05 + sweep * .05);
-          gl_FragColor = vec4(col * (1. - .7 * uLight), 1.);
+          // light page: this layer is normal-blended frost instead of added light (which vanishes on
+          // white): a cyan sheen toward the silhouette, white glints on the lit shards, and the
+          // slow white sweep across the faces
+          float glint = step(.88, h) * smoothstep(.45, 1., r);
+          vec3 frost = mix(vec3(.55, .92, 1.), vec3(1.), clamp(rim * .6 + sweep + glint, 0., 1.));
+          float frostA = clamp(rim * .32 + sweep * .45 + glint * .35 + edge * .3, 0., .85);
+          gl_FragColor = vec4(mix(col, frost, uLight), mix(1., frostA, uLight));
           ${OUTPUT}
         }`,
       ),
-    ),
-  );
+    );
+  const front = new Mesh(cube, frontMaterial);
   front.renderOrder = ORDER + 10;
   model.add(back, front, edgeTubes(cube, 0.05, lineMaterial));
 
@@ -292,11 +299,11 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
         float lit = smoothstep(.12, .7, rim + (h - .5) * .3);
         // light page: pale unlit facets and a deeper cyan, so the ring still stands out from the glass
         vec3 unlit = mix(cNavy * .5, vec3(.62, .83, .97), uLight);
-        vec3 litColor = mix(cCyan, vec3(.10, .55, .95), uLight * .6);
+        vec3 litColor = mix(cCyan, vec3(.0, .46, .86), uLight * .85);
         vec3 col = mix(unlit, litColor, lit);
-        col = mix(col, cLight, smoothstep(.45, 1., lit) * (.45 + step(.4, h) * .5));
+        col = mix(col, cLight, smoothstep(.45, 1., lit) * (.45 + step(.4, h) * .5) * (1. - .55 * uLight));
         col += cLight * pow(max(0., sin(uTime * 0.6 + h * 25.)), 30.) * lit * .3;
-        gl_FragColor = vec4(col, mix(uAMin, uAMax, lit));
+        gl_FragColor = vec4(col, mix(uAMin, uAMax, lit) + uLight * lit * .14);
         ${OUTPUT}
       }`,
       FrontSide,
@@ -459,10 +466,13 @@ export function createCrystalCore({ pixelRatio = 1 }: { pixelRatio?: number } = 
     spin() {
       spinTarget += Math.PI * 2;
     },
-    /** Dark navy glass on a dark page; pale frosted glass with navy outlines on a light one */
+    /** Dark navy glass on a dark page; translucent cyan glass with deep cyan outlines on a light one */
     setDark(dark: boolean) {
       uniforms.uLight.value = dark ? 0 : 1;
       lineMaterial.color.set(dark ? PALETTE.line : PALETTE.lineLight);
+      // Added light on the dark page, normal-blended frost on the light one
+      frontMaterial.blending = dark ? CustomBlending : NormalBlending;
+      frontMaterial.needsUpdate = true;
     },
     /** Geometry and materials are disposed by the scene traversal; nothing else is held */
     dispose() {},

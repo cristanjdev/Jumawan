@@ -21,8 +21,9 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 const App = () => {
   const tier = usePerformanceStore((s) => s.tier);
   const reduceMotion = usePerformanceStore((s) => s.reduceMotion);
-  // Weak devices (and reduced-motion users) get native scrolling — it's cheaper and never lags the input
-  const smoothWheel = tier !== 'low' && !reduceMotion;
+  // Smooth scrolling is on for every performance tier (low just gets a snappier ease); only users who ask
+  // the OS for reduced motion get native scrolling
+  const smoothWheel = !reduceMotion;
 
   // Initialize performance monitoring in development
   useEffect(() => {
@@ -34,7 +35,7 @@ const App = () => {
   return (
     <ConvexProvider client={convex}>
       <ReactLenis root options={{
-        lerp: tier === 'high' ? 0.08 : 0.12,
+        lerp: tier === 'high' ? 0.08 : tier === 'medium' ? 0.12 : 0.16,
         duration: 1.6,
         smoothWheel,
         wheelMultiplier: 0.9,

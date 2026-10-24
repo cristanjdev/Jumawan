@@ -3,10 +3,10 @@
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { Download, ExternalLink, FileText, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useHeroSettingsStore } from "@/stores/useHeroSettingsStore";
+import { HeroPortrait } from "@/components/portrait/hero-portrait";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 import { useMotionBudget } from "@/stores/usePerformanceStore";
 import { ZoomIn, ZoomOut } from "lucide-react";
@@ -26,35 +26,42 @@ const DYNAMIC_PHRASES = [
   "Passionate about creating seamless experiences across web and mobile platforms.",
 ];
 
-// Typing animation lives in its own component so each keystroke re-renders
-// only this heading text, not the whole hero.
+// The heading types the name, then each credential in turn, and loops. It lives in its own component so each
+// keystroke re-renders only this heading text, not the whole hero.
+const TYPED_LINES = [FULL_NAME, "Graduated with Honors", "Outstanding Intern"];
+
 function TypingName({ animate }: { animate: boolean }) {
+  const [line, setLine] = useState(0);
   const [count, setCount] = useState(animate ? 0 : FULL_NAME.length);
   const [isDeleting, setIsDeleting] = useState(false);
+  const text = animate ? TYPED_LINES[line] : FULL_NAME;
 
   useEffect(() => {
     if (!animate) {
+      setLine(0);
       setCount(FULL_NAME.length);
       return;
     }
-    const atEnd = !isDeleting && count === FULL_NAME.length;
+    const atEnd = !isDeleting && count === text.length;
     const atStart = isDeleting && count === 0;
-    const delay = atEnd ? 1200 : isDeleting ? 80 : 120;
+    const delay = atEnd ? 1800 : atStart ? 250 : isDeleting ? 60 : 110;
 
     const timeout = window.setTimeout(() => {
       if (atEnd) setIsDeleting(true);
-      else if (atStart) setIsDeleting(false);
-      else setCount((c) => c + (isDeleting ? -1 : 1));
+      else if (atStart) {
+        setIsDeleting(false);
+        setLine((l) => (l + 1) % TYPED_LINES.length);
+      } else setCount((c) => c + (isDeleting ? -1 : 1));
     }, delay);
     return () => window.clearTimeout(timeout);
-  }, [animate, count, isDeleting]);
+  }, [animate, count, isDeleting, text]);
 
   return (
     <>
       {/* Screen readers and crawlers always get the full, stable name */}
       <span className="sr-only">{FULL_NAME}</span>
       <span aria-hidden="true" className="bg-gradient-to-r from-[hsl(197,100%,85%)] via-[hsl(202,85%,70%)] to-[hsl(197,100%,60%)] bg-clip-text text-transparent">
-        {FULL_NAME.slice(0, count)}
+        {text.slice(0, count)}
       </span>
       <motion.span
         key={`cursor-${animate}`}
@@ -66,6 +73,52 @@ function TypingName({ animate }: { animate: boolean }) {
         |
       </motion.span>
     </>
+  );
+}
+
+const ROLE_MAX_PX = 13;
+const ROLE_MIN_PX = 8;
+
+/**
+ * The hero badges as plain text on one line, separated by dots. The roles come from the admin, so the line
+ * shrinks its text to the width it has instead of wrapping: it measures itself at full size, then scales down.
+ */
+function RoleLine({ roles }: { roles: string[] }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLParagraphElement>(null);
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const line = lineRef.current;
+    if (!box || !line) return;
+    const fit = () => {
+      line.style.fontSize = `${ROLE_MAX_PX}px`;
+      const ratio = box.clientWidth / line.scrollWidth;
+      const size = Math.max(ROLE_MIN_PX, Math.min(ROLE_MAX_PX, Math.floor(ROLE_MAX_PX * ratio * 10) / 10));
+      line.style.fontSize = `${size}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [roles]);
+
+  return (
+    <div ref={boxRef} className="w-full">
+      <p
+        ref={lineRef}
+        // `w-max` lets the line report its natural width so it can be measured
+        className="flex w-max items-center justify-center whitespace-nowrap font-medium text-muted-foreground/90 max-lg:mx-auto"
+        style={{ fontSize: ROLE_MAX_PX }}
+      >
+        {roles.map((role, i) => (
+          <span key={role} className="inline-flex items-center">
+            {i > 0 && <span aria-hidden className="mx-[0.7em] h-[0.3em] w-[0.3em] shrink-0 rounded-full bg-muted-foreground/50" />}
+            {role}
+          </span>
+        ))}
+      </p>
+    </div>
   );
 }
 
@@ -109,12 +162,8 @@ export function HeroSection() {
   const [resumeDragStart, setResumeDragStart] = useState({ x: 0, y: 0 });
   const [resumeDragging, setResumeDragging] = useState(false);
   const resumeContainerRef = useRef<HTMLDivElement>(null);
-  const [imageError, setImageError] = useState(false);
   const [animationsReady, setAnimationsReady] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isAvatarHovered, setIsAvatarHovered] = useState(false);
-  const [isProfileImageLoaded, setIsProfileImageLoaded] = useState(false);
-  const avatarRef = useRef<HTMLDivElement>(null);
 
   // Fetch dynamic hero settings
   const { badges, resumeUrl, profileImageUrl, hoverLogoUrl, fetchSettings, loading } = useHeroSettingsStore();
@@ -154,18 +203,6 @@ export function HeroSection() {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
-
-  // Dismiss avatar logo on outside tap (mobile)
-  useEffect(() => {
-    if (!isMobile || !isAvatarHovered) return;
-    const handleOutsideTap = (e: TouchEvent | MouseEvent) => {
-      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
-        setIsAvatarHovered(false);
-      }
-    };
-    document.addEventListener('touchstart', handleOutsideTap);
-    return () => document.removeEventListener('touchstart', handleOutsideTap);
-  }, [isMobile, isAvatarHovered]);
 
   // Close resume modal on Esc key + reset zoom
   useEffect(() => {
@@ -249,6 +286,9 @@ export function HeroSection() {
 
   // Low tier keeps the avatar's static borders but skips the extra rings, dots and pulses
   const showDecor = animationsReady && tier !== "low";
+
+  // The portrait shows the developer role from the hero badges
+  const cardRole = badges.find((badge) => /developer/i.test(badge)) ?? "Full Stack Developer";
 
   const scrollToProjects = () => {
     scrollToSection("projects");
@@ -389,16 +429,6 @@ export function HeroSection() {
 
   return (
     <>
-      <style>{`
-        @keyframes spin-orbit {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-      `}</style>
       <section
       ref={sectionRef}
       id="home"
@@ -481,21 +511,14 @@ export function HeroSection() {
             >
               {/* Typing Name */}
               <motion.div variants={fadeUp} style={parallax ? { x: nameX } : undefined}>
-                <h1 className="text-[clamp(1.5rem,5vw,3.75rem)] font-extrabold leading-[1.08] tracking-tight whitespace-nowrap">
+                <h1 className="text-[clamp(1.5rem,4.4vw,3.75rem)] font-extrabold leading-[1.08] tracking-tight whitespace-nowrap">
                   <TypingName animate={ambient} />
                 </h1>
               </motion.div>
 
-              {/* Role Tags - Refined pill design */}
-              <motion.div variants={fadeUp} className="flex flex-wrap gap-2 sm:gap-2.5 justify-center lg:justify-start mt-5 sm:mt-6 mb-6 sm:mb-7">
-                {badges.map((role) => (
-                  <span
-                    key={role}
-                    className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-[11px] sm:text-xs font-medium text-muted-foreground/90 bg-muted/5 border border-border/10 hover:border-primary/20 hover:bg-muted/10 transition-all duration-300 cursor-default"
-                  >
-                    {role}
-                  </span>
-                ))}
+              {/* Roles: plain text on one line, dot-separated, sized to fit */}
+              <motion.div variants={fadeUp} className="mt-5 sm:mt-6 mb-6 sm:mb-7">
+                <RoleLine roles={badges} />
               </motion.div>
 
               {/* Description - Dynamic rotating phrases */}
@@ -554,11 +577,11 @@ export function HeroSection() {
               style={parallax ? { scale: avatarScale, y: avatarY, willChange: 'transform' } : undefined}
               className="relative flex justify-center lg:justify-end order-1 lg:order-2"
             >
-              {/* Float animation wraps everything */}
+              {/* Float animation wraps the portrait and its glow */}
               <motion.div
                 animate={!ambient || !animationsReady ? undefined : { y: [0, -12, 0] }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                className="relative w-[250px] h-[250px] sm:w-[288px] sm:h-[288px] md:w-[336px] md:h-[336px] lg:w-[384px] lg:h-[384px]"
+                className="relative"
               >
                 {/* Ambient glow - breathing (static below the high tier: animating a blurred, blended layer repaints every frame) */}
                 <motion.div
@@ -573,276 +596,19 @@ export function HeroSection() {
                     background: 'radial-gradient(circle, var(--avatar-glow-1), var(--avatar-glow-2), var(--avatar-glow-3), transparent 70%)',
                     filter: 'blur(60px)',
                     mixBlendMode: 'screen',
-                    willChange: rich && animationsReady ? 'opacity, transform' : 'auto'
+                    willChange: rich && animationsReady ? 'opacity, transform' : 'auto',
                   }}
                 />
-
-                {/* SVG Loading Rings & Effects */}
-                {showDecor && (
-                <svg key={`rings-${ambient}`} className="absolute -inset-6 sm:-inset-8 md:-inset-10 w-[calc(100%+48px)] h-[calc(100%+48px)] sm:w-[calc(100%+64px)] sm:h-[calc(100%+64px)] md:w-[calc(100%+80px)] md:h-[calc(100%+80px)]" viewBox="0 0 400 400">
-                  <defs>
-                    <linearGradient id="arcGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="hsl(202 85% 55%)" stopOpacity="0" />
-                      <stop offset="40%" stopColor="hsl(202 85% 55%)" stopOpacity="1" />
-                      <stop offset="100%" stopColor="hsl(197 100% 70%)" stopOpacity="0.8" />
-                    </linearGradient>
-                    <linearGradient id="arcGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="hsl(260 70% 60%)" stopOpacity="0" />
-                      <stop offset="50%" stopColor="hsl(260 70% 60%)" stopOpacity="0.7" />
-                      <stop offset="100%" stopColor="hsl(220 80% 60%)" stopOpacity="0" />
-                    </linearGradient>
-                    <linearGradient id="arcGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="hsl(197 100% 70%)" stopOpacity="0.7" />
-                      <stop offset="100%" stopColor="hsl(202 85% 55%)" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Outermost faint ring */}
-                  <circle cx="200" cy="200" r="198" fill="none" stroke="hsl(202 85% 55%)" strokeWidth="0.3" opacity="0.06" />
-
-                  {/* Outer loading arc 1 */}
-                  <motion.circle
-                    cx="200" cy="200" r="195"
-                    fill="none"
-                    stroke="url(#arcGrad1)"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeDasharray="320 900"
-                    animate={!ambient ? undefined : {
-                      strokeDashoffset: [0, -1220],
-                    }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                  />
-
-                  {/* Outer loading arc 2 - counter */}
-                  <motion.circle
-                    cx="200" cy="200" r="191"
-                    fill="none"
-                    stroke="url(#arcGrad2)"
-                    strokeWidth="1.2"
-                    strokeLinecap="round"
-                    strokeDasharray="150 1050"
-                    animate={!ambient ? undefined : {
-                      strokeDashoffset: [1200, 0],
-                    }}
-                    transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-                  />
-
-                  {/* Segmented progress ring */}
-                  <motion.circle
-                    cx="200" cy="200" r="182"
-                    fill="none"
-                    stroke="url(#arcGrad3)"
-                    strokeWidth="0.8"
-                    strokeLinecap="round"
-                    strokeDasharray="40 25 80 25 20 25"
-                    animate={!ambient ? undefined : {
-                      strokeDashoffset: [0, -215],
-                    }}
-                    transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                  />
-
-                  {/* Tick marks - reduced to 24 ticks for better performance */}
-                  {[...Array(24)].map((_, i) => {
-                    const angle = (i * 15 * Math.PI) / 180;
-                    const r1 = 176;
-                    const isMajor = i % 3 === 0;
-                    const r2 = isMajor ? 171 : 173.5;
-                    return (
-                      <line
-                        key={`tick-${i}`}
-                        x1={200 + Math.cos(angle) * r1}
-                        y1={200 + Math.sin(angle) * r1}
-                        x2={200 + Math.cos(angle) * r2}
-                        y2={200 + Math.sin(angle) * r2}
-                        stroke={isMajor ? 'hsl(197 100% 70%)' : 'hsl(202 85% 55%)'}
-                        strokeWidth={isMajor ? '1.2' : '0.4'}
-                        strokeLinecap="round"
-                        opacity={isMajor ? 0.3 : 0.1}
-                      />
-                    );
-                  })}
-
-                  {/* Inner data ring - dotted */}
-                  <circle
-                    cx="200" cy="200" r="167"
-                    fill="none"
-                    stroke="hsl(220 80% 60%)"
-                    strokeWidth="0.5"
-                    strokeDasharray="2 8"
-                    opacity="0.15"
-                  />
-
-                </svg>
-                )}
-
-                {/* Orbiting dots - reduced to 2 for better performance */}
-                {showDecor && [
-                  { delay: 0, dur: 6, size: 6, color: 'var(--avatar-dot-1)', glow: 'var(--avatar-dot-1-glow)' },
-                  { delay: 3, dur: 6, size: 5, color: 'var(--avatar-dot-2)', glow: 'var(--avatar-dot-2-glow)' },
-                ].map((dot, i) => (
-                  <div
-                    key={`orbit-dot-${i}`}
-                    className="absolute -inset-6 sm:-inset-8 md:-inset-10"
-                    style={{ 
-                      transformOrigin: 'center center',
-                      animation: !ambient ? 'none' : `spin-orbit ${dot.dur}s linear infinite`,
-                      animationDelay: `${dot.delay}s`
-                    }}
-                  >
-                    <div
-                      className="absolute rounded-full"
-                      style={{
-                        width: `${dot.size}px`,
-                        height: `${dot.size}px`,
-                        top: '0px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: dot.color,
-                        boxShadow: `0 0 10px 3px ${dot.glow}`,
-                      }}
-                    />
-                  </div>
-                ))}
-
-                {/* Pulse rings - reduced to 2 for better performance */}
-                {showDecor && ambient && [0, 1].map((i) => (
-                  <motion.div
-                    key={`pulse-${i}`}
-                    animate={{
-                      scale: [1, 1.15],
-                      opacity: [0.15, 0],
-                    }}
-                    transition={{
-                      duration: 3,
-                      repeat: Infinity,
-                      delay: i * 1.5,
-                      ease: "easeOut",
-                    }}
-                    className="absolute inset-0 rounded-full border pointer-events-none"
-                    style={{
-                      borderColor: ['var(--avatar-pulse-1)', 'var(--avatar-pulse-2)'][i],
-                      willChange: 'transform, opacity'
-                    }}
-                  />
-                ))}
-
-                {/* Primary comet-trail spinning border */}
-                {animationsReady && (
-                <motion.div
-                  key={`comet-${ambient}`}
-                  animate={!ambient ? undefined : { rotate: [0, 360] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    padding: '3px',
-                    background: 'var(--avatar-comet)',
-                    WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-                    WebkitMaskComposite: 'xor',
-                    maskComposite: 'exclude',
-                    willChange: 'transform'
-                  }}
+                {/* The 3D portrait, in the style picked in admin */}
+                <HeroPortrait
+                  photoUrl={profileImageUrl}
+                  loading={loading}
+                  name="Cristan Jade Jumawan"
+                  role={cardRole}
+                  logoUrl={hoverLogoUrl}
+                  animated={ambient && animationsReady}
+                  interactive={parallax}
                 />
-                )}
-
-                {/* Counter-rotating accent border */}
-                {animationsReady && (
-                <motion.div
-                  key={`comet-accent-${ambient}`}
-                  animate={!ambient ? undefined : { rotate: [360, 0] }}
-                  transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    padding: '3px',
-                    background: 'var(--avatar-comet-accent)',
-                    WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-                    WebkitMaskComposite: 'xor',
-                    maskComposite: 'exclude',
-                    willChange: 'transform'
-                  }}
-                />
-                )}
-
-                {/* Photo - seamless against border */}
-                <div
-                  ref={avatarRef}
-                  className="absolute inset-[3px] rounded-full overflow-hidden cursor-pointer"
-                  onMouseEnter={() => { if (!isMobile) setIsAvatarHovered(true); }}
-                  onMouseLeave={() => { if (!isMobile) setIsAvatarHovered(false); }}
-                  onClick={() => { if (isMobile && hoverLogoUrl) setIsAvatarHovered(prev => !prev); }}
-                >
-                  {loading ? (
-                    <Skeleton className="w-full h-full rounded-full bg-primary/10" />
-                  ) : imageError ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5 rounded-full">
-                      <div className="text-4xl font-bold text-primary/60">CJ</div>
-                    </div>
-                  ) : (
-                    <div className="relative w-full h-full">
-                      {!isProfileImageLoaded && (
-                        <Skeleton className="absolute inset-0 w-full h-full rounded-full bg-primary/10 z-10" />
-                      )}
-                      {/* Profile image */}
-                      <motion.img
-                        src={profileImageUrl}
-                        alt="Cristan Jade Jumawan - Full Stack Developer"
-                        className={`absolute inset-0 w-full h-full object-cover rounded-full transition-opacity duration-300 ${!isProfileImageLoaded ? 'opacity-0' : 'opacity-100'}`}
-                        loading="eager"
-                        onLoad={() => setIsProfileImageLoaded(true)}
-                        animate={{
-                          opacity: (isAvatarHovered && hoverLogoUrl && isProfileImageLoaded) ? 0 : (!isProfileImageLoaded ? 0 : 1),
-                          scale: (isAvatarHovered && hoverLogoUrl && isProfileImageLoaded) ? 0.9 : 1,
-                        }}
-                        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                        onError={() => setImageError(true)}
-                        style={{ willChange: 'transform, opacity' }}
-                      />
-                      {/* Hover logo (BluTech) */}
-                      {hoverLogoUrl && (
-                        <motion.div
-                          className="absolute inset-0 flex items-center justify-center rounded-full bg-[var(--surface-bg)]/80 backdrop-blur-sm z-20"
-                          initial={{ opacity: 0, scale: 1.1 }}
-                          animate={{
-                            opacity: (isAvatarHovered && isProfileImageLoaded) ? 1 : 0,
-                            scale: (isAvatarHovered && isProfileImageLoaded) ? 1 : 1.1,
-                          }}
-                          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                          style={{ willChange: 'transform, opacity' }}
-                        >
-                          <motion.img
-                            src={hoverLogoUrl}
-                            alt="BluTech Logo"
-                            className="w-[65%] h-[65%] object-contain drop-shadow-[0_0_20px_hsl(202,85%,55%,0.4)]"
-                            initial={{ scale: 0.7, rotate: -10 }}
-                            animate={{
-                              scale: (isAvatarHovered && isProfileImageLoaded) ? 1 : 0.7,
-                              rotate: (isAvatarHovered && isProfileImageLoaded) ? 0 : -10,
-                            }}
-                            transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
-                            style={{ willChange: 'transform' }}
-                          />
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Breathing outer glow — box-shadow animation repaints every frame, so it's static below the high tier */}
-                {animationsReady && (
-                <motion.div
-                  key={`breath-${rich}`}
-                  animate={!rich ? undefined : {
-                    boxShadow: [
-                      'var(--avatar-shadow-1)',
-                      'var(--avatar-shadow-2)',
-                      'var(--avatar-shadow-1)',
-                    ],
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute inset-0 rounded-full pointer-events-none"
-                  style={rich ? { willChange: 'box-shadow' } : { boxShadow: 'var(--avatar-shadow-1)' }}
-                />
-                )}
               </motion.div>
             </motion.div>
           </div>

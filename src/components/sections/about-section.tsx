@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import Autoplay from "embla-carousel-autoplay";
 import { ClipboardList, ShieldCheck, Workflow, type LucideIcon } from "lucide-react";
 
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel";
@@ -21,6 +22,34 @@ export function AboutSection() {
     const [carouselApi, setCarouselApi] = useState<CarouselApi>();
     const [currentSlide, setCurrentSlide] = useState(0);
     const [slideCount, setSlideCount] = useState(0);
+    const reduceMotion = useReducedMotion();
+    const photoRef = useRef<HTMLDivElement>(null);
+
+    // The photos turn on their own every few seconds. A visitor's hand on the carousel (hover, touch, drag)
+    // pauses it; it resumes when they let go. Off-screen, in a hidden tab, or with reduced motion it stays still.
+    const autoplay = useMemo(
+        () => (reduceMotion ? [] : [Autoplay({ delay: 4500, stopOnInteraction: false, stopOnMouseEnter: true, playOnInit: false })]),
+        [reduceMotion],
+    );
+
+    useEffect(() => {
+        const player = carouselApi?.plugins().autoplay;
+        const el = photoRef.current;
+        if (!player || !el) return;
+        let visible = false;
+        const sync = () => (visible && !document.hidden ? player.play() : player.stop());
+        const observer = new IntersectionObserver(([entry]) => {
+            visible = entry.isIntersecting;
+            sync();
+        }, { threshold: 0.4 });
+        observer.observe(el);
+        document.addEventListener("visibilitychange", sync);
+        return () => {
+            observer.disconnect();
+            document.removeEventListener("visibilitychange", sync);
+            player.stop();
+        };
+    }, [carouselApi, slideCount]);
 
     useEffect(() => {
         fetchImages();
@@ -68,7 +97,7 @@ export function AboutSection() {
 
 
     return (
-        <section id="about" className="relative overflow-hidden" style={{ paddingTop: '2rem', paddingBottom: '6rem' }}>
+        <section id="about" className="relative overflow-hidden pt-8 pb-14 sm:pb-24">
             <div className="container px-4 md:px-6 relative z-10">
                 <motion.div
                     initial="hidden"
@@ -79,12 +108,12 @@ export function AboutSection() {
                 >
                     {/* Header */}
                     <motion.div variants={itemVariants} className="flex flex-col items-center mb-12 md:mb-16 mx-auto w-fit">
-                        <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
+                        <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl font-bold mb-4 text-center">
                             <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                                 About Me
                             </span>
                         </h2>
-                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+                        <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
                             A developer who builds with the craft of an engineer and the speed of AI
                         </p>
                     </motion.div>
@@ -92,7 +121,7 @@ export function AboutSection() {
                     {/* Intro: photo carousel beside the bio */}
                     <div className="grid lg:grid-cols-12 gap-10 lg:gap-16 items-stretch">
                         <motion.div variants={itemVariants} className="lg:col-span-5 relative group max-w-md w-full mx-auto lg:max-w-none lg:h-full">
-                            <div className="relative rounded-2xl overflow-hidden aspect-square lg:aspect-auto lg:h-full lg:min-h-[22rem] shadow-2xl shadow-primary/5 bg-muted/20">
+                            <div ref={photoRef} className="relative rounded-2xl overflow-hidden aspect-square lg:aspect-auto lg:h-full lg:min-h-[22rem] shadow-2xl shadow-primary/5 bg-muted/20">
                                 {loading && carouselItems.length === 0 ? (
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <div className="h-12 w-12 animate-pulse rounded-full bg-primary/20" aria-hidden />
@@ -101,13 +130,14 @@ export function AboutSection() {
                                     <Carousel
                                         className="w-full h-full"
                                         setApi={setCarouselApi}
+                                        plugins={autoplay}
                                         opts={{
                                             align: "center",
                                             loop: true,
                                             dragFree: false,
                                             containScroll: "trimSnaps",
                                             skipSnaps: false,
-                                            duration: 25,
+                                            duration: 40, // a slower, softer slide than a manual swipe
                                         }}
                                     >
                                         <CarouselContent className="-ml-0 h-full">
@@ -187,11 +217,12 @@ export function AboutSection() {
                             <ol className="grid gap-4 sm:grid-cols-3">
                                 {AI_STEPS.map(({ icon: Icon, title, text }, i) => (
                                     <li key={title} className="rounded-xl bg-muted/15 p-5 text-center">
-                                        <div className="flex items-center justify-center gap-2.5">
+                                        {/* One row on phones (icon, number, title); from `sm` the cards are narrow, so the title drops below */}
+                                        <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-3">
                                             <Icon className="h-5 w-5 text-primary" aria-hidden />
                                             <span className="text-xs font-semibold tabular-nums text-muted-foreground">0{i + 1}</span>
+                                            <h4 className="text-base font-semibold text-foreground sm:basis-full">{title}</h4>
                                         </div>
-                                        <h4 className="mt-3 text-base font-semibold text-foreground">{title}</h4>
                                         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{text}</p>
                                     </li>
                                 ))}

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
-import { DetailBlock, DetailCard, DetailDialog, MediaSplit, StatusPill, TagList } from "@/components/ui/detail-card";
+import { ArrowRight, BookOpen, CircleDashed, GraduationCap } from "lucide-react";
+import { DetailBlock, DetailCard, DetailDialog, MediaSplit, StatusMark, TagList } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
 import { useReturnFocus } from "@/hooks/use-return-focus";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
@@ -14,6 +14,22 @@ import { Achievement, Education, useEducationStore } from "@/stores/useEducation
 /** "Graduated with Honors" — honors fold into the status so the card carries a single badge */
 const statusLabel = (edu: Education) =>
   edu.honors ? `${edu.status} ${edu.honors.charAt(0).toLowerCase()}${edu.honors.slice(1)}` : edu.status;
+
+/** Plain cyan status text: a cap for graduated, a dashed circle while still in progress */
+const statusMark = (edu: Education) => (
+  <StatusMark icon={/graduat/i.test(edu.status) ? GraduationCap : CircleDashed}>{statusLabel(edu)}</StatusMark>
+);
+
+/** The same status as a label over the card image's bottom-right corner */
+const statusBadge = (edu: Education) => {
+  const Icon = /graduat/i.test(edu.status) ? GraduationCap : CircleDashed;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Icon aria-hidden className="h-3.5 w-3.5" strokeWidth={2.2} />
+      {statusLabel(edu)}
+    </span>
+  );
+};
 
 const startYear = (edu: Education) => Number.parseInt(edu.period, 10);
 const endYear = (edu: Education) => Number.parseInt(edu.period.split("–").pop() ?? "", 10);
@@ -69,14 +85,14 @@ function EducationDialog({
       onClose={onClose}
       onCloseAutoFocus={onCloseAutoFocus}
       title={edu.degree}
-      subtitle={edu.school}
-      // Honors already show in this badge ("Graduated with Honors")
-      badge={edu.status && <StatusPill>{statusLabel(edu)}</StatusPill>}
+      // Honors already show in this status ("Graduated with Honors")
+      badge={edu.status && statusMark(edu)}
     >
       <MediaSplit
         src={edu.image_url}
         alt={`${edu.degree} at ${edu.school}`}
         facts={[
+          ["School", edu.school],
           ["Years attended", edu.period],
           ["Level", edu.level],
           ["GPA", edu.gpa],
@@ -131,14 +147,14 @@ export function EducationSection() {
   };
 
   return (
-    <section id="education" className="relative overflow-hidden py-24">
+    <section id="education" className="relative overflow-hidden py-14 sm:py-24">
       <div className="container relative z-10 px-4 md:px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div {...reveal} className="mx-auto mb-14 flex w-fit flex-col items-center sm:mb-16">
-            <h2 className="mb-4 text-center text-4xl font-bold md:text-5xl">
+            <h2 className="mb-4 text-center text-[clamp(1.5rem,7.2vw,2.25rem)] font-bold md:text-5xl">
               <span className="text-cyan-400">Education</span>
             </h2>
-            <p className="mx-auto max-w-2xl text-center text-lg font-medium text-muted-foreground">
+            <p className="mx-auto max-w-2xl text-center text-base sm:text-lg font-medium text-muted-foreground">
               My academic background and qualifications
             </p>
           </motion.div>
@@ -148,13 +164,14 @@ export function EducationSection() {
               <motion.div key={edu.id} {...reveal} className="h-full min-w-0">
                 <DetailCard
                   period={edu.period}
-                  badge={edu.status && <StatusPill>{statusLabel(edu)}</StatusPill>}
+                  lead={edu.level && <StatusMark icon={BookOpen}>{edu.level}</StatusMark>}
                   title={edu.degree}
                   subtitle={edu.school}
                   details={edu.location}
-                  tags={edu.coursework}
+                  // Key coursework stays in the details modal, not on the card
+                  tags={[]}
                   tagsLabel="Key coursework"
-                  media={{ src: edu.image_url, alt: edu.school, badge: edu.level }}
+                  media={{ src: edu.image_url, alt: edu.school, badge: edu.status && statusBadge(edu) }}
                   onOpen={() => open(edu)}
                 />
               </motion.div>

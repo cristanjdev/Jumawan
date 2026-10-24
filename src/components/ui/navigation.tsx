@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Github, Linkedin, Sun, Moon } from "lucide-react";
+import { motion } from "framer-motion";
+import { Github, Linkedin, Sun, Moon, Home, User, FolderKanban, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { BrandLogo } from "@/components/ui/brand-logo";
 
 const navigationItems = [
-  { name: "Home", href: "#home" },
-  { name: "About", href: "#about" },
-  { name: "Projects", href: "#projects" },
-  { name: "Contact", href: "#contact" },
+  { name: "Home", href: "#home", icon: Home },
+  { name: "About", href: "#about", icon: User },
+  { name: "Projects", href: "#projects", icon: FolderKanban },
+  { name: "Contact", href: "#contact", icon: Mail },
 ];
 
 
@@ -20,7 +20,6 @@ const navigationItems = [
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState("home");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { scrollToSection: smoothScrollTo, scrollToTop } = useSmoothScroll();
   const { theme, toggleTheme } = useThemeStore();
 
@@ -90,36 +89,32 @@ export function Navigation() {
       }, 1200);
     };
 
-    if (isMobileMenuOpen) {
-      setIsMobileMenuOpen(false);
-      setTimeout(performScroll, 300);
-    } else {
-      performScroll();
-    }
+    performScroll();
   };
 
   return (
+    <>
     <motion.header
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 1.2, type: "spring", stiffness: 80, damping: 20 }}
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-        isScrolled || isMobileMenuOpen
-          ? "bg-[var(--surface-nav)] backdrop-blur-md shadow-lg py-2"
-          : "bg-transparent py-3 sm:py-4"
+        isScrolled
+          ? "bg-[var(--surface-nav)] backdrop-blur-md shadow-lg py-0 md:py-2"
+          : "bg-transparent py-0 md:py-4"
       )}
       style={{ transform: "translateZ(0)", willChange: "transform" }}
     >
-      <nav className="container mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14 sm:h-auto">
+      <nav className="container mx-auto px-4 md:px-6">
+        <div className="flex items-center justify-between h-16 md:h-auto">
           {/* Logo */}
           <motion.div
             whileHover={{ scale: 1.05 }}
             transition={{ duration: 0.3 }}
             className="select-none group"
           >
-            <BrandLogo className="block h-9 sm:h-10 md:h-11 object-contain transition duration-300 dark:drop-shadow-[0_0_10px_rgba(56,189,248,0.45)] dark:group-hover:drop-shadow-[0_0_16px_rgba(56,189,248,0.75)] group-hover:brightness-110" />
+            <BrandLogo className="block h-9 md:h-11 object-contain transition duration-300 dark:drop-shadow-[0_0_10px_rgba(56,189,248,0.45)] dark:group-hover:drop-shadow-[0_0_16px_rgba(56,189,248,0.75)] group-hover:brightness-110" />
           </motion.div>
 
           {/* Desktop Navigation */}
@@ -175,116 +170,51 @@ export function Navigation() {
             </div>
           </div>
 
-          {/* Mobile: Theme Toggle + Menu Button */}
-          <div className="md:hidden flex items-center gap-3">
-            <button
-              onClick={toggleTheme}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-              className="text-foreground hover:text-primary transition-colors"
-            >
-              {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button
-              className="text-foreground hover:text-primary transition-colors"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
+          {/* Mobile: just the theme toggle; the sections are in the bottom bar */}
+          <button
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            className="md:hidden -mr-2 inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground transition-colors hover:text-primary"
+          >
+            {theme === "dark" ? <Sun size={22} /> : <Moon size={22} />}
+          </button>
         </div>
       </nav>
 
-      {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ 
-              duration: 0.4,
-              ease: [0.4, 0, 0.2, 1],
-              opacity: { duration: 0.3 }
-            }}
-            className="md:hidden bg-[var(--surface-nav)] backdrop-blur-md border-t border-border/20 overflow-hidden"
-          >
-            <motion.div 
-              className="container mx-auto px-4 sm:px-6 py-6"
-              initial={{ y: -20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -20, opacity: 0 }}
-              transition={{ 
-                duration: 0.3,
-                delay: 0.1,
-                ease: [0.4, 0, 0.2, 1]
-              }}
-            >
-              {/* Navigation Links and Social Icons in Row */}
-              <div className="flex flex-wrap items-center justify-center gap-4">
-                {navigationItems.map((item, index) => (
-                  <motion.button
-                    key={item.name}
-                    onClick={() => scrollToSection(item.href)}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ 
-                      duration: 0.3,
-                      delay: 0.1 + (index * 0.05),
-                      ease: [0.4, 0, 0.2, 1]
-                    }}
-                    className={cn(
-                      "px-4 py-2 h-10 text-sm font-medium transition-all duration-300 rounded-lg border flex items-center justify-center",
-                      activeSection === item.href.substring(1)
-                        ? "text-primary border-primary/40 bg-primary/10"
-                        : "text-foreground/80 border-border/20 hover:text-primary hover:border-primary/30 hover:bg-primary/5"
-                    )}
-                  >
-                    {item.name}
-                  </motion.button>
-                ))}
-
-                {/* Social Icons */}
-                <motion.a
-                  href="https://github.com/cristanjdev"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="GitHub"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ 
-                    duration: 0.3,
-                    delay: 0.1 + (navigationItems.length * 0.05),
-                    ease: [0.4, 0, 0.2, 1]
-                  }}
-                  className="px-4 py-2 h-10 text-sm font-medium transition-all duration-300 rounded-lg border text-foreground/80 border-border/20 hover:text-primary hover:border-primary/30 hover:bg-primary/5 flex items-center justify-center"
-                >
-                  <Github className="h-4 w-4" />
-                </motion.a>
-                <motion.a
-                  href="https://www.linkedin.com/in/cristan-jade-jumawan-45b27b39b"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="LinkedIn"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ 
-                    duration: 0.3,
-                    delay: 0.1 + ((navigationItems.length + 1) * 0.05),
-                    ease: [0.4, 0, 0.2, 1]
-                  }}
-                  className="px-4 py-2 h-10 text-sm font-medium transition-all duration-300 rounded-lg border text-foreground/80 border-border/20 hover:text-primary hover:border-primary/30 hover:bg-primary/5 flex items-center justify-center"
-                >
-                  <Linkedin className="h-4 w-4" />
-                </motion.a>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.header>
+
+    {/* Mobile: a bottom tab bar with the sections, like an app; clears Android's gesture area */}
+    <motion.nav
+      aria-label="Sections"
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 1.2, type: "spring", stiffness: 80, damping: 20 }}
+      className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-border/20 bg-[var(--surface-nav)] backdrop-blur-md shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)]"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="mx-auto flex max-w-md items-stretch">
+        {navigationItems.map((item) => {
+          const active = activeSection === item.href.substring(1);
+          const Icon = item.icon;
+          return (
+            <li key={item.name} className="flex-1">
+              <button
+                onClick={() => scrollToSection(item.href)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors",
+                  active ? "text-primary" : "text-foreground/60 hover:text-foreground"
+                )}
+              >
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 2} />
+                {item.name}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </motion.nav>
+    </>
   );
 }
 

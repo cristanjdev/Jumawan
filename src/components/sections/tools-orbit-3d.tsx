@@ -126,7 +126,7 @@ export function ToolsOrbit3D({
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
       onPointerDown={onPointerDown}
-      className="relative isolate mx-auto h-[clamp(380px,62vh,540px)] w-full max-w-7xl select-none sm:h-[clamp(500px,76vh,700px)] lg:h-[clamp(560px,78vh,760px)]"
+      className="relative isolate mx-auto h-[clamp(240px,70vw,460px)] w-full max-w-7xl select-none sm:h-[clamp(500px,76vh,700px)] lg:h-[clamp(560px,78vh,760px)]"
     >
       <div ref={hostRef} aria-hidden className="pointer-events-none absolute inset-0 z-[1000]" />
       <ul aria-label="Tools and technologies">
@@ -135,21 +135,19 @@ export function ToolsOrbit3D({
             <li
               key={tool.name}
               data-ring={r}
-              className="group absolute left-0 top-0 h-9 w-9 opacity-0 will-change-transform sm:h-11 sm:w-11 lg:h-12 lg:w-12 xl:h-14 xl:w-14"
+              className="group absolute left-0 top-0 h-6 w-6 opacity-0 will-change-transform min-[400px]:h-7 min-[400px]:w-7 sm:h-11 sm:w-11 lg:h-12 lg:w-12 xl:h-14 xl:w-14"
               onPointerEnter={(event) => sceneRef.current?.setHover(event.currentTarget)}
               onPointerLeave={() => sceneRef.current?.setHover(null)}
             >
-              {/* glass badge: light frost on the light theme, cyan-rimmed navy glass on the dark one */}
-              <div className="grid h-full w-full place-items-center rounded-[30%] border border-sky-500/30 bg-[radial-gradient(circle_at_30%_22%,#ffffff,rgba(224,242,254,0.92)_70%)] shadow-[0_4px_14px_rgba(2,132,199,0.15)] backdrop-blur-sm transition-[border-color,box-shadow] duration-200 group-hover:border-sky-500/70 group-hover:shadow-[0_0_22px_rgba(2,132,199,0.35)] dark:border-[rgba(90,200,255,0.35)] dark:bg-[radial-gradient(circle_at_30%_22%,rgba(130,225,255,0.2),rgba(6,18,44,0.88)_70%)] dark:shadow-[0_0_18px_rgba(47,200,255,0.16),inset_0_0_12px_rgba(47,200,255,0.12)] dark:group-hover:border-[#8fe9ff] dark:group-hover:shadow-[0_0_30px_rgba(47,200,255,0.55),inset_0_0_16px_rgba(47,200,255,0.3)]">
-                {/* hairline contour: keeps white logos visible on the light badge and black ones on the dark badge */}
-                <img
-                  src={tool.image}
-                  alt={tool.name}
-                  className="h-[58%] w-[58%] object-contain [filter:drop-shadow(0_0_0.6px_rgba(15,23,42,0.6))_drop-shadow(0_1px_1px_rgba(15,23,42,0.2))] dark:[filter:drop-shadow(0_0_0.7px_rgba(255,255,255,0.65))]"
-                  draggable={false}
-                  decoding="async"
-                />
-              </div>
+              {/* No badge: the logo itself glows. A hairline contour keeps white logos visible on the light page and
+                  black ones on the dark one; the soft halo behind it is cyan on dark and sky blue on light. */}
+              <img
+                src={tool.image}
+                alt={tool.name}
+                className="h-full w-full object-contain transition-[filter,transform] duration-200 group-hover:scale-110 [filter:drop-shadow(0_0_0.6px_rgba(15,23,42,0.7))_drop-shadow(0_0_4px_rgba(6,182,212,0.85))_drop-shadow(0_0_10px_rgba(6,182,212,0.45))] group-hover:[filter:drop-shadow(0_0_0.6px_rgba(15,23,42,0.7))_drop-shadow(0_0_6px_rgba(6,182,212,1))_drop-shadow(0_0_16px_rgba(6,182,212,0.75))] dark:[filter:drop-shadow(0_0_0.8px_rgba(255,255,255,0.95))_drop-shadow(0_0_0.8px_rgba(255,255,255,0.7))_drop-shadow(0_0_6px_rgba(47,200,255,0.6))] dark:group-hover:[filter:drop-shadow(0_0_0.8px_rgba(255,255,255,0.95))_drop-shadow(0_0_0.8px_rgba(255,255,255,0.7))_drop-shadow(0_0_12px_rgba(47,200,255,0.95))]"
+                draggable={false}
+                decoding="async"
+              />
               <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 -translate-y-1 whitespace-nowrap rounded-full border border-sky-500/30 bg-white/95 px-2.5 py-1 text-xs font-semibold text-slate-800 opacity-0 transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 dark:border-[rgba(90,200,255,0.45)] dark:bg-[rgba(6,20,48,0.92)] dark:text-[#e6f6ff]">
                 {tool.name}
               </span>

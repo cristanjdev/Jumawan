@@ -7,6 +7,7 @@ import { CertificatesSection } from "@/components/sections/certificates-section-
 import { ExperienceSection } from "@/components/sections/experience-section";
 import { EducationSection } from "@/components/sections/education-section";
 import { ProjectsSection } from "@/components/sections/projects-section";
+import { FeaturedProjectsSection } from "@/components/sections/featured-projects-section";
 import { ContactSection } from "@/components/sections/contact-section-dynamic";
 import { Footer } from "@/components/sections/footer";
 import { motion, useScroll, useTransform } from "framer-motion";
@@ -50,7 +51,8 @@ const Portfolio = () => {
     <div className="min-h-screen bg-[var(--surface-bg)] text-foreground">
       <Navigation />
 
-      <main>
+      {/* On phones the bottom tab bar is fixed over the page: leave room for it */}
+      <main className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <HeroSection />
 
         {/* Unified Space/Galaxy Background for all sections */}
@@ -88,6 +90,7 @@ const Portfolio = () => {
           {/* Content sections - seamless flow */}
           <div className="relative z-10">
             <AboutSection />
+            <FeaturedProjectsSection />
             <SkillsSection />
             <ToolsCarousel />
             <CertificatesSection />
@@ -95,11 +98,10 @@ const Portfolio = () => {
             <EducationSection />
             <ProjectsSection />
             <ContactSection />
+            <Footer />
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 };

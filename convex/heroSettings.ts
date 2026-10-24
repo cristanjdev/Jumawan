@@ -1,5 +1,31 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import type { MutationCtx } from "./_generated/server";
+
+const settingType = v.union(
+  v.literal("badge"),
+  v.literal("resume"),
+  v.literal("profile_image"),
+  v.literal("hover_logo"),
+  v.literal("portrait_style"),
+  v.literal("depth_map")
+);
+
+/** The 3D portrait styles the hero can show; the admin picks one */
+const PORTRAIT_STYLES = ["glass_card", "lanyard", "coin", "hologram", "laptop", "depth"] as const;
+const portraitStyle = v.union(...PORTRAIT_STYLES.map((style) => v.literal(style)));
+
+/** Settings that hold a single value: update it, or create it on first save */
+async function upsertSingle(ctx: MutationCtx, type: "portrait_style" | "depth_map", value: string) {
+  const all = await ctx.db.query("hero_settings").withIndex("by_type").collect();
+  const existing = all.find((s) => s.type === type);
+  if (existing) {
+    await ctx.db.patch(existing._id, { value });
+    return await ctx.db.get(existing._id);
+  }
+  const id = await ctx.db.insert("hero_settings", { type, value, order_index: 0, is_active: true });
+  return await ctx.db.get(id);
+}
 
 export const list = query({
   args: {},
@@ -17,7 +43,7 @@ export const listActive = query({
 });
 
 export const getByType = query({
-  args: { type: v.union(v.literal("badge"), v.literal("resume"), v.literal("profile_image"), v.literal("hover_logo")) },
+  args: { type: settingType },
   handler: async (ctx, args) => {
     const all = await ctx.db
       .query("hero_settings")
@@ -29,7 +55,7 @@ export const getByType = query({
 
 export const create = mutation({
   args: {
-    type: v.union(v.literal("badge"), v.literal("resume"), v.literal("profile_image"), v.literal("hover_logo")),
+    type: settingType,
     value: v.string(),
     order_index: v.number(),
     is_active: v.boolean(),
@@ -141,4 +167,14 @@ export const updateHoverLogo = mutation({
       return await ctx.db.get(id);
     }
   },
+});
+
+export const updatePortraitStyle = mutation({
+  args: { style: portraitStyle },
+  handler: async (ctx, args) => upsertSingle(ctx, "portrait_style", args.style),
+});
+
+export const updateDepthMap = mutation({
+  args: { url: v.string() },
+  handler: async (ctx, args) => upsertSingle(ctx, "depth_map", args.url),
 });

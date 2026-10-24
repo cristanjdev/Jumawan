@@ -12,12 +12,20 @@ import { convexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
 import { Button } from "@/components/ui/button";
 import { TechIcons } from "@/components/ui/tech-icons";
+import { CarouselProgress } from "@/components/ui/carousel-progress";
 import { useTechIcon } from "@/hooks/use-tech-icon";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
+import { ZoomableImage } from "@/components/ui/zoomable-image";
 import { ExternalLink, FolderOpen, Github, Search } from "lucide-react";
 import { DetailBlock, DetailDialog, TagList } from "@/components/ui/detail-card";
 import { useLatest } from "@/hooks/use-latest";
 import { useLenis } from "lenis/react";
+
+/** Distance from one card's left edge to the next one's (card width plus gap) */
+const cardStep = (row: HTMLElement) => {
+  const [first, second] = [row.children[0], row.children[1]] as (HTMLElement | undefined)[];
+  return first && second ? second.offsetLeft - first.offsetLeft : row.scrollWidth || 1;
+};
 
 export function ProjectsSection() {
   const shouldReduceMotion = useReducedMotion();
@@ -48,7 +56,7 @@ export function ProjectsSection() {
     const check = () => {
       const width = window.innerWidth;
       setIsMobile(width < 768);
-      setCardsPerPage(width < 768 ? 1 : width < 1024 ? 2 : 3);
+      setCardsPerPage(width < 768 ? 1 : width < 1024 ? 2 : width < 1800 ? 3 : 4);
     };
     check();
     window.addEventListener('resize', check);
@@ -57,13 +65,26 @@ export function ProjectsSection() {
 
   const totalPages = Math.ceil(projects.length / cardsPerPage);
   const currentPage = Math.floor(currentCard / cardsPerPage);
+  // Beside a page of cards, a sliver of the neighbouring cards shows so it's clear the row continues (phones
+  // already peek: their cards are 80vw wide). The page sits centred with an equal sliver reserved on each side;
+  // a sliver dims toward the edge, and is left empty where there is no card (first and last page).
+  const GAP = 24;
+  const peek = cardsPerPage >= 3 ? 80 : 56;
+  const sidePad = peek + GAP;
+  const hasPrev = !isMobile && currentPage > 0;
+  const hasNext = !isMobile && currentPage < totalPages - 1;
+  // A sliver fades out toward the edge of the row, reaching full strength where the page's first/last card begins
+  const peekMask = hasPrev || hasNext
+    ? `linear-gradient(to right, ${hasPrev ? `transparent 0, #000 ${sidePad}px` : '#000 0'}, ${hasNext ? `#000 calc(100% - ${sidePad}px), transparent 100%` : '#000 100%'})`
+    : undefined;
+  // Empty slots after the last card so the last page lines up like the others instead of sliding right
+  const emptySlots = isMobile ? 0 : totalPages * cardsPerPage - projects.length;
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current || projects.length === 0) return;
     const el = scrollRef.current;
     savedScrollLeft.current = el.scrollLeft;
-    const cardWidth = el.scrollWidth / projects.length;
-    const idx = Math.round(el.scrollLeft / cardWidth);
+    const idx = Math.round(el.scrollLeft / cardStep(el));
     setCurrentCard(Math.max(0, Math.min(idx, projects.length - 1)));
   }, [projects.length]);
 
@@ -71,8 +92,7 @@ export function ProjectsSection() {
     if (!scrollRef.current || projects.length === 0) return;
     const clamped = Math.max(0, Math.min(idx, projects.length - 1));
     const el = scrollRef.current;
-    const cardWidth = el.scrollWidth / projects.length;
-    el.scrollTo({ left: cardWidth * clamped, behavior: 'smooth' });
+    el.scrollTo({ left: cardStep(el) * clamped, behavior: 'smooth' });
   };
 
   const scrollToPage = (page: number) => {
@@ -220,11 +240,11 @@ export function ProjectsSection() {
   const renderMobileCard = (project: Project, index: number) => (
     <div
       onClick={() => safeOpenModal(index)}
-      className="h-full relative border border-border/50 rounded-xl transition-all duration-500 ease-in-out hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)] overflow-hidden cursor-pointer group"
+      className="h-full relative flex flex-col border border-border/50 rounded-xl transition-all duration-500 ease-in-out hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)] overflow-hidden cursor-pointer group"
     >
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
 
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/5 flex items-center justify-center">
+      <div className="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-muted/5 flex items-center justify-center">
         {project.image_url ? (
           <>
             <OptimizedImage
@@ -244,26 +264,28 @@ export function ProjectsSection() {
         )}
       </div>
 
-      <div className="p-4 space-y-3 text-center">
-        <h3 className="text-base font-semibold text-foreground leading-tight group-hover:text-primary transition-colors duration-300 line-clamp-2">
+      {/* Every block has a fixed height (two lines of title and description, one row of icons), so the cards in a
+          row are the same height without leftover space under the shorter ones */}
+      <div className="flex flex-1 flex-col gap-3 p-4 text-center">
+        <h3 className="min-h-[2.5em] text-base font-semibold text-foreground leading-tight group-hover:text-primary transition-colors duration-300 line-clamp-2">
           {project.title}
         </h3>
-        <p className="text-xs text-muted-foreground/60 leading-relaxed line-clamp-2">{project.description}</p>
-        <TechIcons technologies={project.technologies} className="justify-center" />
-        <p className="text-[10px] text-primary/60 italic">Tap to view details</p>
+        <p className="min-h-[3.25em] text-xs text-muted-foreground/60 leading-relaxed line-clamp-2">{project.description}</p>
+        <TechIcons technologies={project.technologies} fit className="justify-center" />
+        <p className="mt-auto text-[10px] text-primary/60 italic">Tap to view details</p>
       </div>
     </div>
   );
 
   if (loading) {
     return (
-      <section id="projects" className="py-20 bg-transparent relative overflow-hidden">
+      <section id="projects" className="py-12 sm:py-20 bg-transparent relative overflow-hidden">
         <div className="container mx-auto px-6">
           <div className="flex flex-col items-center mb-16 mx-auto w-fit">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
-              <span className="text-cyan-400">Featured Projects</span>
+            <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl font-bold mb-4 text-center">
+              <span className="text-cyan-400">All Projects</span>
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
               A showcase of my best work and creative solutions
             </p>
           </div>
@@ -293,7 +315,7 @@ export function ProjectsSection() {
   }
 
   return (
-    <section id="projects" className="py-20 bg-transparent relative overflow-hidden border-none outline-none">
+    <section id="projects" className="py-12 sm:py-20 bg-transparent relative overflow-hidden border-none outline-none">
       <div className="container mx-auto px-6 relative z-10">
         <motion.div
           initial="hidden"
@@ -303,10 +325,10 @@ export function ProjectsSection() {
           className="max-w-6xl mx-auto"
         >
           <motion.div variants={itemVariants} className="flex flex-col items-center mb-16 mx-auto w-fit">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-center">
-              <span className="text-cyan-400">Featured Projects</span>
+            <h2 className="text-[clamp(1.5rem,7.2vw,2.25rem)] md:text-5xl font-bold mb-4 text-center">
+              <span className="text-cyan-400">All Projects</span>
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto text-center font-medium">
               A showcase of my best work and creative solutions
             </p>
           </motion.div>
@@ -315,7 +337,7 @@ export function ProjectsSection() {
             <div className="text-center py-12">
               <FolderOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-xl font-medium text-white mb-2">No projects yet</h3>
-              <p className="text-muted-foreground">Featured projects will be displayed here once added</p>
+              <p className="text-muted-foreground">Projects will be displayed here once added</p>
             </div>
           ) : (
             <>
@@ -329,13 +351,18 @@ export function ProjectsSection() {
                     className="border-border/40 hover:border-cyan-400/40 hover:bg-cyan-400/5 text-muted-foreground hover:text-cyan-400 transition-all duration-300 text-xs sm:text-sm"
                   >
                     <FolderOpen className="h-3.5 w-3.5 mr-2" />
-                    See All {projects.length} Projects
+                    View {projects.length} Projects
                   </Button>
                 </motion.div>
               )}
 
               {/* Unified swipeable carousel — 1 card mobile, 2 tablet, 3 desktop */}
-              <motion.div variants={itemVariants} className="relative overflow-hidden -mx-6">
+              <motion.div
+                variants={itemVariants}
+                className="relative overflow-hidden -mx-6"
+                // On wide screens the row grows past the heading's width into the free space on both sides (80px kept clear)
+                style={isMobile ? undefined : { marginInline: 'calc(-24px - clamp(0px, (100vw - 1360px) / 2, 300px))' }}
+              >
                 <div
                   ref={scrollRef}
                   onScroll={handleScroll}
@@ -354,38 +381,40 @@ export function ProjectsSection() {
                     touchAction: 'pan-y',
                     overscrollBehaviorX: 'contain',
                     overscrollBehaviorY: 'auto',
-                    paddingLeft: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : '24px',
-                    paddingRight: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : '24px',
+                    paddingLeft: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : `${sidePad}px`,
+                    paddingRight: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : `${sidePad}px`,
+                    maskImage: peekMask,
+                    WebkitMaskImage: peekMask,
                   }}
                 >
                   {projects.map((project, index) => (
                     <div
                       key={project.id}
                       className="shrink-0"
-                      style={{ width: isMobile ? 'min(80vw, 340px)' : `calc((100% - ${(cardsPerPage - 1) * 24}px) / ${cardsPerPage})` }}
+                      style={{ width: isMobile ? 'min(80vw, 340px)' : `calc((100% - ${(cardsPerPage - 1) * GAP}px) / ${cardsPerPage})` }}
                     >
                       {isMobile ? renderMobileCard(project, index) : (
                         <ProjectCard project={project} index={index} openModalAt={safeOpenModal} />
                       )}
                     </div>
                   ))}
+                  {Array.from({ length: emptySlots }, (_, i) => (
+                    <div
+                      key={`slot-${i}`}
+                      aria-hidden
+                      className="shrink-0"
+                      style={{ width: `calc((100% - ${(cardsPerPage - 1) * GAP}px) / ${cardsPerPage})` }}
+                    />
+                  ))}
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="flex flex-col items-center gap-2 mt-4">
-                    <div className="flex items-center gap-1.5">
-                      {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          aria-label={`Go to page ${i + 1}`}
-                          onClick={() => scrollToPage(i)}
-                          className={`rounded-full transition-all duration-300 ${i === currentPage ? "w-6 h-2 bg-cyan-400" : "w-2 h-2 bg-border/20 hover:bg-border/40"}`}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-[11px] text-muted-foreground/40 italic">{isMobile ? 'Swipe' : 'Drag'} to explore · {currentPage + 1} / {totalPages}</span>
-                  </div>
+                  <CarouselProgress
+                    page={currentPage}
+                    pages={totalPages}
+                    hint={`${isMobile ? 'Swipe' : 'Drag'} to explore`}
+                    onSeek={scrollToPage}
+                  />
                 )}
               </motion.div>
             </>
@@ -469,7 +498,7 @@ function SeeAllProjectsModal({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-5xl border-[var(--border-subtle)] bg-[var(--surface-modal)] backdrop-blur-2xl !p-0 !gap-0 [&>button]:z-20 rounded-2xl md:rounded-3xl shadow-2xl">
         <div className="flex flex-col h-[85svh] md:h-[82vh] overflow-hidden rounded-2xl md:rounded-3xl" data-lenis-prevent>
-          <div className="relative shrink-0 space-y-4 px-5 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-[var(--border-subtle)] bg-[var(--surface-bg-alt)]">
+          <div className="relative shrink-0 space-y-4 px-5 sm:px-8 pt-6 sm:pt-8 pb-4 bg-[var(--surface-bg-alt)]">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-accent/40 to-transparent rounded-t-2xl md:rounded-t-3xl" />
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl font-bold text-foreground">
@@ -488,8 +517,8 @@ function SeeAllProjectsModal({
                     onClick={() => setCategory(name)}
                     className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       category === name
-                        ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-300"
-                        : "border-border/50 text-muted-foreground hover:border-cyan-400/40 hover:text-foreground"
+                        ? "border-cyan-600/60 bg-cyan-500/15 text-cyan-700 dark:border-cyan-400/60 dark:bg-cyan-400/15 dark:text-cyan-300"
+                        : "border-border/50 text-muted-foreground hover:border-cyan-600/50 hover:text-foreground dark:hover:border-cyan-400/40"
                     }`}
                   >
                     {name} <span className="opacity-60">{count}</span>
@@ -505,7 +534,7 @@ function SeeAllProjectsModal({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search projects or tech"
                   aria-label="Search projects"
-                  className="h-9 w-full rounded-lg border border-border/50 bg-background/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-400/60 focus:outline-none"
+                  className="h-9 w-full rounded-lg border border-border/50 bg-background/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-600/70 focus:outline-none dark:focus:border-cyan-400/60"
                 />
               </div>
             </div>
@@ -525,7 +554,7 @@ function SeeAllProjectsModal({
                     key={project.id}
                     type="button"
                     onClick={() => onSelect(index)}
-                    className="group flex flex-col text-left rounded-xl border border-border/40 overflow-hidden hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-500 bg-background/40 backdrop-blur-sm"
+                    className="group flex flex-col text-left rounded-xl border border-border/40 overflow-hidden hover:border-cyan-600/50 dark:hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(8,145,178,0.18)] dark:hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-500 bg-background/40 backdrop-blur-sm"
                   >
                     <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/10">
                       {project.image_url ? (
@@ -545,7 +574,7 @@ function SeeAllProjectsModal({
                     </div>
                     <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
                       <div>
-                        <p className="text-xs sm:text-sm font-bold text-foreground leading-tight line-clamp-2 group-hover:text-cyan-400 transition-colors duration-300">
+                        <p className="text-xs sm:text-sm font-bold text-foreground leading-tight line-clamp-2 group-hover:text-cyan-700 dark:group-hover:text-cyan-400 transition-colors duration-300">
                           {project.title}
                         </p>
                         {(project.category || project.year) && (
@@ -554,7 +583,7 @@ function SeeAllProjectsModal({
                           </p>
                         )}
                       </div>
-                      <TechIcons technologies={project.technologies} limit={7} className="mt-auto" />
+                      <TechIcons technologies={project.technologies} fit className="mt-auto" />
                     </div>
                   </button>
                 ))}
@@ -619,13 +648,7 @@ export function ProjectsModal({
         <div className="flex flex-col gap-5">
           <div className="flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-xl bg-muted/10 ring-1 ring-border/40">
             {project.image_url ? (
-              <OptimizedImage
-                src={project.image_url}
-                alt={project.title}
-                className="h-full w-full select-none object-contain"
-                draggable={false}
-                fallbackIcon={<FolderOpen className="h-12 w-12 text-muted-foreground/30" />}
-              />
+              <ZoomableImage key={project.image_url} src={project.image_url} alt={project.title} inline />
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground/30">
                 <FolderOpen className="h-12 w-12" strokeWidth={1.5} />
