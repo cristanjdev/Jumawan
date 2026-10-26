@@ -65,6 +65,7 @@ export const OptimizedImage = ({
       )}
       <img
         ref={imgRef}
+        data-src={src}
         alt={alt}
         className={`transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'} ${className}`}
         onLoad={handleLoad}

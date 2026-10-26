@@ -6,13 +6,14 @@ import {
 } from "@/components/ui/dialog";
 import { useProjectStore, Project } from "@/stores/useProjectStore";
 import { ProjectCard } from "./ProjectCard";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { convexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
 import { Button } from "@/components/ui/button";
 import { TechIcons } from "@/components/ui/tech-icons";
 import { CarouselProgress } from "@/components/ui/carousel-progress";
+import { useDragCarousel } from "@/hooks/use-drag-carousel";
 import { useTechIcon } from "@/hooks/use-tech-icon";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
@@ -21,163 +22,22 @@ import { DetailBlock, DetailDialog, TagList } from "@/components/ui/detail-card"
 import { useLatest } from "@/hooks/use-latest";
 import { useLenis } from "lenis/react";
 
-/** Distance from one card's left edge to the next one's (card width plus gap) */
-const cardStep = (row: HTMLElement) => {
-  const [first, second] = [row.children[0], row.children[1]] as (HTMLElement | undefined)[];
-  return first && second ? second.offsetLeft - first.offsetLeft : row.scrollWidth || 1;
-};
-
 export function ProjectsSection() {
   const shouldReduceMotion = useReducedMotion();
   const { projects, loading, fetchProjects } = useProjectStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [currentCard, setCurrentCard] = useState(0);
   const [showAllModal, setShowAllModal] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const savedScrollLeft = useRef(0);
 
   useEffect(() => {
     fetchProjects();
     trackPageView();
   }, []);
 
-  // Restore scroll position after projects re-render
-  useEffect(() => {
-    if (scrollRef.current && projects.length > 0 && savedScrollLeft.current > 0) {
-      scrollRef.current.scrollLeft = savedScrollLeft.current;
-    }
-  }, [projects]);
-
-  const [cardsPerPage, setCardsPerPage] = useState(3);
-
-  useEffect(() => {
-    const check = () => {
-      const width = window.innerWidth;
-      setIsMobile(width < 768);
-      setCardsPerPage(width < 768 ? 1 : width < 1024 ? 2 : width < 1800 ? 3 : 4);
-    };
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
-  const totalPages = Math.ceil(projects.length / cardsPerPage);
-  const currentPage = Math.floor(currentCard / cardsPerPage);
-  // Beside a page of cards, a sliver of the neighbouring cards shows so it's clear the row continues (phones
-  // already peek: their cards are 80vw wide). The page sits centred with an equal sliver reserved on each side;
-  // a sliver dims toward the edge, and is left empty where there is no card (first and last page).
-  const GAP = 24;
-  const peek = cardsPerPage >= 3 ? 80 : 56;
-  const sidePad = peek + GAP;
-  const hasPrev = !isMobile && currentPage > 0;
-  const hasNext = !isMobile && currentPage < totalPages - 1;
-  // A sliver fades out toward the edge of the row, reaching full strength where the page's first/last card begins
-  const peekMask = hasPrev || hasNext
-    ? `linear-gradient(to right, ${hasPrev ? `transparent 0, #000 ${sidePad}px` : '#000 0'}, ${hasNext ? `#000 calc(100% - ${sidePad}px), transparent 100%` : '#000 100%'})`
-    : undefined;
-  // Empty slots after the last card so the last page lines up like the others instead of sliding right
-  const emptySlots = isMobile ? 0 : totalPages * cardsPerPage - projects.length;
-
-  const handleScroll = useCallback(() => {
-    if (!scrollRef.current || projects.length === 0) return;
-    const el = scrollRef.current;
-    savedScrollLeft.current = el.scrollLeft;
-    const idx = Math.round(el.scrollLeft / cardStep(el));
-    setCurrentCard(Math.max(0, Math.min(idx, projects.length - 1)));
-  }, [projects.length]);
-
-  const scrollToCard = (idx: number) => {
-    if (!scrollRef.current || projects.length === 0) return;
-    const clamped = Math.max(0, Math.min(idx, projects.length - 1));
-    const el = scrollRef.current;
-    el.scrollTo({ left: cardStep(el) * clamped, behavior: 'smooth' });
-  };
-
-  const scrollToPage = (page: number) => {
-    scrollToCard(page * cardsPerPage);
-  };
-
-  const goToPrevPage = () => { if (currentPage > 0) scrollToPage(currentPage - 1); };
-  const goToNextPage = () => { if (currentPage < totalPages - 1) scrollToPage(currentPage + 1); };
-
-  // Drag/swipe handling — works for both mouse (desktop) and touch (mobile)
-  const isDragging = useRef(false);
-  const hasDragged = useRef(false);
-  const dragStartX = useRef(0);
-  const dragScrollLeft = useRef(0);
-  const dragStartCard = useRef(0);
-  const momentumRaf = useRef<number>(0);
-
-  const startDrag = (clientX: number) => {
-    if (!scrollRef.current) return;
-    cancelAnimationFrame(momentumRaf.current);
-    isDragging.current = true;
-    hasDragged.current = false;
-    dragStartX.current = clientX;
-    dragScrollLeft.current = scrollRef.current.scrollLeft;
-    dragStartCard.current = currentCard;
-    scrollRef.current.style.scrollSnapType = 'none';
-    scrollRef.current.style.scrollBehavior = 'auto';
-    if (!isMobile) scrollRef.current.style.cursor = 'grabbing';
-  };
-
-  const moveDrag = (clientX: number) => {
-    if (!isDragging.current || !scrollRef.current) return;
-    const walk = clientX - dragStartX.current;
-    if (Math.abs(walk) > 5) hasDragged.current = true;
-    scrollRef.current.scrollLeft = dragScrollLeft.current - walk;
-  };
-
-  const endDrag = (clientX: number) => {
-    if (!isDragging.current || !scrollRef.current) return;
-    isDragging.current = false;
-    const el = scrollRef.current;
-    el.style.cursor = '';
-    el.style.scrollSnapType = '';
-    el.style.scrollBehavior = '';
-
-    const swipeDist = clientX - dragStartX.current;
-    const threshold = 30; // px — sensitive swipe
-    const startPage = Math.floor(dragStartCard.current / cardsPerPage);
-
-    if (Math.abs(swipeDist) > threshold) {
-      // Swiped far enough — commit to next/prev page
-      const targetPage = swipeDist < 0
-        ? Math.min(startPage + 1, totalPages - 1)
-        : Math.max(startPage - 1, 0);
-      scrollToPage(targetPage);
-    } else {
-      // Didn't swipe far enough — snap back to original page
-      scrollToPage(startPage);
-    }
-  };
-
-  // Mouse events (desktop)
-  const onMouseDown = (e: ReactMouseEvent) => {
-    if (isMobile) return;
-    startDrag(e.pageX);
-  };
-  const onMouseMove = (e: ReactMouseEvent) => {
-    if (!isDragging.current) return;
-    e.preventDefault();
-    moveDrag(e.pageX);
-  };
-  const onMouseUp = (e: ReactMouseEvent) => {
-    endDrag(e.pageX);
-  };
-
-  // Touch events (mobile) — override CSS snap for controlled swiping
-  const onTouchStart = (e: React.TouchEvent) => {
-    startDrag(e.touches[0].clientX);
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    moveDrag(e.touches[0].clientX);
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    endDrag(e.changedTouches[0].clientX);
-  };
+  // The row loops and turns a page on its own; it waits while a dialog is open
+  const { scrollRef, handlers, layout, slots, isMobile, totalPages, currentPage, scrollToPage, consumeDrag } = useDragCarousel(projects.length, {
+    paused: isModalOpen || showAllModal,
+  });
 
   const trackPageView = async () => {
     try {
@@ -197,9 +57,9 @@ export function ProjectsSection() {
   }, []);
 
   const safeOpenModal = useCallback((index: number) => {
-    if (hasDragged.current) { hasDragged.current = false; return; }
+    if (consumeDrag()) return;
     openModalAt(index);
-  }, [openModalAt]);
+  }, [openModalAt, consumeDrag]);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -356,24 +216,16 @@ export function ProjectsSection() {
                 </motion.div>
               )}
 
-              {/* Unified swipeable carousel — 1 card mobile, 2 tablet, 3 desktop */}
+              {/* Draggable, looping carousel: 1 card on phones, 2 on tablets, 3 on desktop, 4 on very wide screens */}
               <motion.div
                 variants={itemVariants}
                 className="relative overflow-hidden -mx-6"
-                // On wide screens the row grows past the heading's width into the free space on both sides (80px kept clear)
-                style={isMobile ? undefined : { marginInline: 'calc(-24px - clamp(0px, (100vw - 1360px) / 2, 300px))' }}
+                style={layout.wrapStyle}
               >
                 <div
                   ref={scrollRef}
-                  onScroll={handleScroll}
-                  onMouseDown={onMouseDown}
-                  onMouseMove={onMouseMove}
-                  onMouseUp={onMouseUp}
-                  onMouseLeave={onMouseUp}
-                  onTouchStart={onTouchStart}
-                  onTouchMove={onTouchMove}
-                  onTouchEnd={onTouchEnd}
-                  className={`flex gap-4 md:gap-6 overflow-x-auto pb-4 scroll-smooth ${!isMobile ? 'cursor-grab' : ''}`}
+                  {...handlers}
+                  className={`flex gap-4 md:gap-6 overflow-x-auto pb-4 ${!isMobile ? 'cursor-grab' : ''}`}
                   style={{
                     scrollbarWidth: 'none',
                     msOverflowStyle: 'none',
@@ -381,30 +233,26 @@ export function ProjectsSection() {
                     touchAction: 'pan-y',
                     overscrollBehaviorX: 'contain',
                     overscrollBehaviorY: 'auto',
-                    paddingLeft: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : `${sidePad}px`,
-                    paddingRight: isMobile ? 'calc((100vw - min(80vw, 340px)) / 2)' : `${sidePad}px`,
-                    maskImage: peekMask,
-                    WebkitMaskImage: peekMask,
+                    ...layout.rowStyle,
                   }}
                 >
-                  {projects.map((project, index) => (
-                    <div
-                      key={project.id}
-                      className="shrink-0"
-                      style={{ width: isMobile ? 'min(80vw, 340px)' : `calc((100% - ${(cardsPerPage - 1) * GAP}px) / ${cardsPerPage})` }}
-                    >
-                      {isMobile ? renderMobileCard(project, index) : (
-                        <ProjectCard project={project} index={index} openModalAt={safeOpenModal} />
-                      )}
-                    </div>
-                  ))}
-                  {Array.from({ length: emptySlots }, (_, i) => (
-                    <div
-                      key={`slot-${i}`}
-                      aria-hidden
-                      className="shrink-0"
-                      style={{ width: `calc((100% - ${(cardsPerPage - 1) * GAP}px) / ${cardsPerPage})` }}
-                    />
+                  {slots.map((slot) => {
+                    const project = projects[slot.index];
+                    return (
+                      <div
+                        key={slot.clone ? slot.key : project.id}
+                        className="shrink-0"
+                        style={{ width: layout.cardWidth }}
+                        aria-hidden={slot.clone || undefined}
+                      >
+                        {isMobile ? renderMobileCard(project, slot.index) : (
+                          <ProjectCard project={project} index={slot.index} openModalAt={safeOpenModal} />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {Array.from({ length: layout.emptySlots }, (_, i) => (
+                    <div key={`slot-${i}`} aria-hidden className="shrink-0" style={{ width: layout.cardWidth }} />
                   ))}
                 </div>
 

@@ -497,7 +497,9 @@ export function CertificatesSection() {
     ];
   }, [certificates]);
 
-  const { scrollRef, handlers, layout, isMobile, totalPages, currentPage, scrollToPage, consumeDrag } = useDragCarousel(sorted.length);
+  const { scrollRef, handlers, layout, slots, isMobile, totalPages, currentPage, scrollToPage, consumeDrag } = useDragCarousel(sorted.length, {
+    paused: selectedIndex !== null || showAll || verificationUrl !== null,
+  });
 
   const openDetails = useCallback(
     (index: number) => {
@@ -617,7 +619,7 @@ export function CertificatesSection() {
                 <div
                   ref={scrollRef}
                   {...handlers}
-                  className={`flex gap-4 overflow-x-auto scroll-smooth pb-4 md:gap-6 ${!isMobile ? "cursor-grab" : ""}`}
+                  className={`flex gap-4 overflow-x-auto pb-4 md:gap-6 ${!isMobile ? "cursor-grab" : ""}`}
                   style={{
                     scrollbarWidth: "none",
                     msOverflowStyle: "none",
@@ -628,18 +630,21 @@ export function CertificatesSection() {
                     ...layout.rowStyle,
                   }}
                 >
-                  {sorted.map((cert, index) => (
-                    <div key={cert.id} className="shrink-0" style={{ width: layout.cardWidth }}>
-                      <CertificateCard
-                        cert={cert}
-                        onOpen={() => {
-                          if (consumeDrag()) return;
-                          openDetails(index);
-                        }}
-                        onVerifyImage={openVerification}
-                      />
-                    </div>
-                  ))}
+                  {slots.map((slot) => {
+                    const cert = sorted[slot.index];
+                    return (
+                      <div key={slot.clone ? slot.key : cert.id} className="shrink-0" style={{ width: layout.cardWidth }} aria-hidden={slot.clone || undefined}>
+                        <CertificateCard
+                          cert={cert}
+                          onOpen={() => {
+                            if (consumeDrag()) return;
+                            openDetails(slot.index);
+                          }}
+                          onVerifyImage={openVerification}
+                        />
+                      </div>
+                    );
+                  })}
                   {Array.from({ length: layout.emptySlots }, (_, i) => (
                     <div key={`slot-${i}`} aria-hidden className="shrink-0" style={{ width: layout.cardWidth }} />
                   ))}
