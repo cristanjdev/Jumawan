@@ -59,9 +59,7 @@ const Portfolio = () => {
         <div ref={galaxyRef} className="relative bg-[var(--surface-bg)] -mt-px" style={{ contain: 'paint' }}>
           {/* Scroll-based Animated Stars layers */}
           {/* The stars and nebula fade in over the top of the section, so they don't start with a hard edge under the hero */}
-          <div
-            className="absolute inset-0 overflow-hidden pointer-events-none [mask-image:linear-gradient(to_bottom,transparent_0,#000_clamp(160px,28vh,320px))] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0,#000_clamp(160px,28vh,320px))]"
-          >
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
             {/* Layer 1 - Slow parallax stars */}
             <motion.div
               className="stars-layer stars-layer-1"
@@ -85,6 +83,9 @@ const Portfolio = () => {
               <div className="nebula-glow nebula-3" />
               <div className="nebula-glow nebula-4" />
             </motion.div>
+
+            {/* Fades the stars in under the hero. A gradient over them rather than a mask, which would be re-blended every frame */}
+            <div className="absolute inset-x-0 top-0 h-[clamp(160px,28vh,320px)] bg-gradient-to-b from-[var(--surface-bg)] to-transparent" />
           </div>
 
           {/* Content sections - seamless flow */}

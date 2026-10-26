@@ -29,13 +29,14 @@ export const GlobalGlow = () => {
                 WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)'
             }}
         >
-            <div className={`absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-cyan-700/30 via-cyan-800/20 to-transparent blur-3xl opacity-70 ${rich ? "animate-pulse" : ""}`}
+            <div className={`absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-cyan-700/30 via-cyan-800/20 to-transparent opacity-70 ${rich ? "animate-pulse" : ""}`}
                 style={{
                     animationDuration: '4s'
                 }}
             />
             <div
-                className={`absolute bottom-[-100px] left-1/2 -translate-x-1/2 w-[120%] h-[240px] bg-blue-700/25 blur-[100px] rounded-[100%] ${rich ? "animate-pulse" : ""}`}
+                // A soft ellipse drawn with a gradient: it looks like the blurred one it replaces at a fraction of the cost
+                className={`absolute bottom-[-220px] left-1/2 -translate-x-1/2 w-[140%] h-[480px] bg-[radial-gradient(ellipse_closest-side,rgba(29,78,216,0.25),rgba(29,78,216,0.12)_45%,rgba(29,78,216,0.04)_75%,transparent)] ${rich ? "animate-pulse" : ""}`}
                 style={{
                     animationDuration: '6s'
                 }}

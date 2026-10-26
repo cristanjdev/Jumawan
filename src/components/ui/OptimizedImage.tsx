@@ -13,6 +13,9 @@ export const OptimizedImage = ({
   ...props
 }: OptimizedImageProps) => {
   const [isLoaded, setIsLoaded] = useState(false)
+  // Set once the image starts downloading; until then the placeholder stays still, so cards waiting
+  // off screen (most of a carousel) don't keep a spinner animating for nothing
+  const [requested, setRequested] = useState(false)
   const [hasError, setHasError] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
 
@@ -23,6 +26,7 @@ export const OptimizedImage = ({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          setRequested(true)
           img.src = src
           observer.disconnect()
         }
@@ -59,8 +63,8 @@ export const OptimizedImage = ({
   return (
     <div className={`relative ${className}`}>
       {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-navy-700 rounded-lg animate-pulse">
-          <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <div className={`absolute inset-0 flex items-center justify-center bg-navy-700 rounded-lg ${requested ? 'animate-pulse' : ''}`}>
+          {requested && <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
         </div>
       )}
       <img

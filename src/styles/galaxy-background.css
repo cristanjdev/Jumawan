@@ -49,7 +49,7 @@
 .nebula-glow {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
+  scale: 1.4;
   opacity: 0.3;
   will-change: transform, opacity;
   transform: translateZ(0);
@@ -63,6 +63,7 @@
   width: 600px;
   height: 600px;
   background: radial-gradient(circle, var(--nebula-blue) 0%, transparent 70%);
+  background: radial-gradient(circle closest-side, var(--nebula-blue) 0%, color-mix(in srgb, var(--nebula-blue) 55%, transparent) 40%, color-mix(in srgb, var(--nebula-blue) 18%, transparent) 72%, transparent 100%);
   animation: nebulaFloat1 25s ease-in-out infinite;
 }
 
@@ -72,6 +73,7 @@
   width: 500px;
   height: 500px;
   background: radial-gradient(circle, var(--nebula-purple) 0%, transparent 70%);
+  background: radial-gradient(circle closest-side, var(--nebula-purple) 0%, color-mix(in srgb, var(--nebula-purple) 55%, transparent) 40%, color-mix(in srgb, var(--nebula-purple) 18%, transparent) 72%, transparent 100%);
   animation: nebulaFloat2 30s ease-in-out infinite;
 }
 
@@ -81,6 +83,7 @@
   width: 450px;
   height: 450px;
   background: radial-gradient(circle, var(--nebula-indigo) 0%, transparent 70%);
+  background: radial-gradient(circle closest-side, var(--nebula-indigo) 0%, color-mix(in srgb, var(--nebula-indigo) 55%, transparent) 40%, color-mix(in srgb, var(--nebula-indigo) 18%, transparent) 72%, transparent 100%);
   animation: nebulaFloat3 28s ease-in-out infinite;
 }
 
@@ -90,6 +93,7 @@
   width: 550px;
   height: 550px;
   background: radial-gradient(circle, var(--nebula-teal) 0%, transparent 70%);
+  background: radial-gradient(circle closest-side, var(--nebula-teal) 0%, color-mix(in srgb, var(--nebula-teal) 55%, transparent) 40%, color-mix(in srgb, var(--nebula-teal) 18%, transparent) 72%, transparent 100%);
   animation: nebulaFloat4 32s ease-in-out infinite;
 }
 
@@ -129,7 +133,6 @@
   .nebula-1, .nebula-2, .nebula-3, .nebula-4 {
     width: 250px;
     height: 250px;
-    filter: blur(80px);
     opacity: 0.2;
   }
 
@@ -178,7 +181,6 @@
   .nebula-1, .nebula-2, .nebula-3, .nebula-4 {
     width: 180px;
     height: 180px;
-    filter: blur(60px);
     opacity: 0.15;
   }
 
@@ -228,7 +230,7 @@
 
 /* ── Adaptive performance tiers (set on <html data-perf> by usePerformanceStore) ── */
 
-/* Medium: keep the nebulas but stop animating them, so their blur is rasterized once */
+/* Medium: keep the nebulas but stop animating them */
 html[data-perf="medium"] .nebula-glow {
   animation: none;
   will-change: auto;

@@ -8,6 +8,17 @@ import {
   GitBranch,
   Layers,
   Cpu,
+  Globe,
+  Smartphone,
+  ShieldCheck,
+  Radio,
+  Sparkles,
+  Rocket,
+  AppWindow,
+  MonitorSmartphone,
+  Fingerprint,
+  CircuitBoard,
+  WandSparkles,
   LucideIcon,
 } from "lucide-react";
 import { convexClient } from '@/lib/convexClient';
@@ -18,6 +29,10 @@ export interface SkillCategory {
   icon: LucideIcon;
   color: string;
   skills: string[];
+  /** A plain-language line under the title */
+  description?: string;
+  /** Titles of projects that show this skill; each opens that project's details */
+  examples: string[];
 }
 
 interface SkillCategoryRow {
@@ -26,6 +41,8 @@ interface SkillCategoryRow {
   icon_slug: string;
   color_slug: string;
   skills: string[];
+  description?: string;
+  examples?: string[];
   order_index: number;
   is_active: boolean;
 }
@@ -39,27 +56,68 @@ const ICON_MAP: Record<string, LucideIcon> = {
   gitbranch: GitBranch,
   layers: Layers,
   cpu: Cpu,
+  globe: Globe,
+  smartphone: Smartphone,
+  shield: ShieldCheck,
+  radio: Radio,
+  sparkles: Sparkles,
+  rocket: Rocket,
+  appwindow: AppWindow,
+  monitorsmartphone: MonitorSmartphone,
+  fingerprint: Fingerprint,
+  circuitboard: CircuitBoard,
+  wand: WandSparkles,
 };
 
+// Pale shades are only for the dark theme; the light theme gets a deeper one so the icon doesn't wash out
 const COLOR_MAP: Record<string, string> = {
-  cyan: "text-cyan-400",
-  "sky-blue": "text-sky-400",
-  "blue-primary": "text-blue-400",
+  cyan: "text-cyan-600 dark:text-cyan-400",
+  "sky-blue": "text-sky-600 dark:text-sky-400",
+  "blue-primary": "text-blue-600 dark:text-blue-400",
   "primary-accent": "text-primary",
-  "accent-sky": "text-cyan-300",
-  sky: "text-sky-300",
+  "accent-sky": "text-cyan-600 dark:text-cyan-300",
+  sky: "text-sky-600 dark:text-sky-300",
   navy: "text-navy-300",
 };
 
+// Shown until the list loads, or if it can't be reached. Keep it in step with the cards in the admin.
 const DEFAULT_CATEGORIES: SkillCategory[] = [
-  { title: "Languages", icon: Code2, color: "text-sky-400", skills: ["HTML/CSS", "JavaScript", "Python", "PHP", "SQL", "TypeScript", "Kotlin"] },
-  { title: "Frameworks & Libraries", icon: Server, color: "text-blue-400", skills: ["Laravel", "React", "Next.js", "React Native", "Node.js", "Express.js"] },
-  { title: "Tools & Platforms", icon: Database, color: "text-primary", skills: ["Linux", "Git", "Docker", "Node.js", "XAMPP"] },
-  { title: "Deployment & Cloud", icon: Cloud, color: "text-cyan-300", skills: ["Vercel", "Netlify", "Railway", "Firebase", "Convex"] },
-  { title: "Databases", icon: TestTube, color: "text-sky-300", skills: ["MySQL", "PostgreSQL", "Firebase", "Convex"] },
-  { title: "Version Control", icon: GitBranch, color: "text-navy-300", skills: ["Git", "GitHub", "GitLab"] },
-  { title: "AI-Assisted Development", icon: Cpu, color: "text-cyan-400", skills: ["Agentic Coding", "Prompt Engineering", "Context Engineering", "Spec-Driven Development", "AI Code Review"] },
-  { title: "AI Integration", icon: Layers, color: "text-sky-400", skills: ["Gemini API", "AI Chatbots", "LLM APIs", "Prompt Design"] },
+  {
+    title: "Web Applications", icon: AppWindow, color: "text-sky-600 dark:text-sky-400",
+    description: "Complete systems used in a browser, with separate spaces for staff and customers.",
+    skills: ["React", "Next.js", "TypeScript", "Laravel", "Django", "Tailwind CSS", "Vite", "Express.js", "Svelte"],
+    examples: ["LDCU Clinic", "MCA Portal", "School Management System", "Motor PH HR Hub"],
+  },
+  {
+    title: "Mobile & Desktop Apps", icon: MonitorSmartphone, color: "text-blue-600 dark:text-blue-400",
+    description: "Apps for phones, tablets and Windows computers that work in everyday settings.",
+    skills: ["React Native", "Flutter", "Kotlin", "Java", "C#", ".NET", "Expo", "Dart", "Swift"],
+    examples: ["Dizkarte", "ShopLendr", "SmartSpend", "Saint Lawrence HMS"],
+  },
+  {
+    title: "Data, Accounts & Security", icon: Fingerprint, color: "text-primary",
+    description: "Keeping information organised and private, so people only see what they should.",
+    skills: ["MySQL", "PostgreSQL", "Supabase", "Firebase", "Convex", "Permissions", "Prisma", "Redis", "Zod"],
+    examples: ["AGRODATA", "PayrollProject", "Uy-Laurio Legal & Notarial Portal"],
+  },
+  {
+    title: "Real-World & Connected Systems", icon: CircuitBoard, color: "text-cyan-600 dark:text-cyan-300",
+    description: "Software that connects to the real world: live maps, ID cards, QR codes and sensors.",
+    skills: ["Leaflet", "Google Maps", "Arduino", "ESP32", "QR codes", "Real-time", "RFID", "GPS", "WebSockets"],
+    examples: ["ArmoryDB", "RFID Room Access", "Queueing System", "Smart Cemetery Navigation (Menteryo)"],
+  },
+  {
+    title: "Smart Features", icon: WandSparkles, color: "text-cyan-600 dark:text-cyan-400",
+    description: "Helpful automation in an app: a chatbot, suggestions and photo recognition.",
+    skills: ["Chatbot", "Suggestions", "Recognition", "Gemini", "Groq", "Python", "Keras", "OpenCV", "FastAPI"],
+    examples: ["MSEUF Library Portal", "MatriQ"],
+  },
+  {
+    title: "Launching & Teamwork", icon: Rocket, color: "text-sky-600 dark:text-sky-300",
+    description: "Taking a system from idea to launch, then keeping it running with the people who use it.",
+    skills: ["Vercel", "Netlify", "Railway", "Git", "GitHub", "Documentation", "GitLab", "Docker", "Linux"],
+    examples: ["Hopelink v2", "FoundIt!", "EduCatch Lite"],
+  },
 ];
 
 function mapRowToCategory(row: SkillCategoryRow): SkillCategory {
@@ -70,6 +128,8 @@ function mapRowToCategory(row: SkillCategoryRow): SkillCategory {
     icon,
     color,
     skills: Array.isArray(row.skills) ? row.skills : [],
+    description: row.description,
+    examples: Array.isArray(row.examples) ? row.examples : [],
   };
 }
 

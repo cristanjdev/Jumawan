@@ -11,9 +11,12 @@ import { reveal } from "@/lib/section-ui";
 import { cn } from "@/lib/utils";
 import { Achievement, Education, useEducationStore } from "@/stores/useEducationStore";
 
-/** "Graduated with Honors" — honors fold into the status so the card carries a single badge */
+/** Capital letter on every word ("Bachelor's degree" → "Bachelor's Degree"); an apostrophe doesn't start a word, so "Bachelor's" stays */
+const titleCase = (text: string) => text.replace(/(^|[\s(/-])([a-z])/g, (_, lead: string, letter: string) => lead + letter.toUpperCase());
+
+/** "Graduated With Honors" — honors fold into the status so the card carries a single badge */
 const statusLabel = (edu: Education) =>
-  edu.honors ? `${edu.status} ${edu.honors.charAt(0).toLowerCase()}${edu.honors.slice(1)}` : edu.status;
+  titleCase(edu.honors ? `${edu.status} ${edu.honors.charAt(0).toLowerCase()}${edu.honors.slice(1)}` : edu.status);
 
 /** Plain cyan status text: a cap for graduated, a dashed circle while still in progress */
 const statusMark = (edu: Education) => (
@@ -51,7 +54,7 @@ function Ledger({ items }: { items: Achievement[] }) {
           className="flex items-baseline justify-between gap-4 border-b border-border/40 py-[5px] last:border-0 sm:py-2.5"
         >
           <span className="text-[13px] text-foreground/85 sm:text-sm">{item.title}</span>
-          {item.detail && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{item.detail}</span>}
+          {item.detail && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{titleCase(item.detail)}</span>}
         </li>
       ))}
     </ul>
@@ -93,8 +96,8 @@ function EducationDialog({
         alt={`${edu.degree} at ${edu.school}`}
         facts={[
           ["School", edu.school],
-          ["Years attended", edu.period],
-          ["Level", edu.level],
+          ["Years Attended", edu.period],
+          ["Level", edu.level && titleCase(edu.level)],
           ["GPA", edu.gpa],
           ["Location", edu.location],
         ]}
@@ -114,7 +117,7 @@ function EducationDialog({
         {groups.length > 0 && (
           <div className={cn("grid gap-5 sm:gap-6", groups.length > 1 && !edu.image_url && "md:grid-cols-2 md:gap-10")}>
             {groups.map(({ group, items }) => (
-              <DetailBlock key={group} title={group}>
+              <DetailBlock key={group} title={titleCase(group)}>
                 <Ledger items={items} />
               </DetailBlock>
             ))}
@@ -122,7 +125,7 @@ function EducationDialog({
         )}
 
         {edu.coursework.length > 0 && (
-          <DetailBlock title="Key coursework">
+          <DetailBlock title="Key Coursework">
             <TagList items={edu.coursework} />
           </DetailBlock>
         )}
@@ -164,7 +167,7 @@ export function EducationSection() {
               <motion.div key={edu.id} {...reveal} className="h-full min-w-0">
                 <DetailCard
                   period={edu.period}
-                  lead={edu.level && <StatusMark icon={BookOpen}>{edu.level}</StatusMark>}
+                  lead={edu.level && <StatusMark icon={BookOpen}>{titleCase(edu.level)}</StatusMark>}
                   title={edu.degree}
                   subtitle={edu.school}
                   details={edu.location}

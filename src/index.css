@@ -656,3 +656,16 @@ All colors MUST be HSL.
   background-color: rgba(0, 0, 0, 0.65) !important;
   color: rgba(255, 255, 255, 1) !important;
 }
+
+/* A photo behind a card's text that dissolves into the card with no visible edge: a long, eased fade (not a straight
+   line, which shows as a hard edge) from the left on wider screens and from the top on a phone */
+.photo-fade-in {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 14%, rgba(0,0,0,0.2) 28%, rgba(0,0,0,0.45) 42%, rgba(0,0,0,0.72) 58%, rgba(0,0,0,0.92) 74%, #000 90%);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 14%, rgba(0,0,0,0.2) 28%, rgba(0,0,0,0.45) 42%, rgba(0,0,0,0.72) 58%, rgba(0,0,0,0.92) 74%, #000 90%);
+}
+@media (min-width: 640px) {
+  .photo-fade-in {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.03) 10%, rgba(0,0,0,0.12) 22%, rgba(0,0,0,0.3) 34%, rgba(0,0,0,0.55) 48%, rgba(0,0,0,0.8) 62%, rgba(0,0,0,0.95) 76%, #000 90%);
+    mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.03) 10%, rgba(0,0,0,0.12) 22%, rgba(0,0,0,0.3) 34%, rgba(0,0,0,0.55) 48%, rgba(0,0,0,0.8) 62%, rgba(0,0,0,0.95) 76%, #000 90%);
+  }
+}

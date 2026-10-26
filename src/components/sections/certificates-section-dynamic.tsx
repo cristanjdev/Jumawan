@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Award, ArrowUpRight, BadgeCheck, Search } from "lucide-react";
+import { Award, ArrowUpRight, BadgeCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BrowseCard, BrowseDialog } from "@/components/ui/browse-dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DialogBar } from "@/components/ui/dialog-bar";
 import { DetailBlock, DetailDialog, FactsList } from "@/components/ui/detail-card";
 import { ViewDetailsHint } from "@/components/ui/view-details-hint";
@@ -81,7 +82,7 @@ function CertImage({ src, alt, className }: { src?: string; alt: string; classNa
 
   return (
     <>
-      {state === "loading" && <div className="absolute inset-0 animate-pulse bg-muted/20" />}
+      {state === "loading" && <div className="absolute inset-0 bg-muted/20" />}
       <img
         src={src}
         alt={alt}
@@ -135,8 +136,9 @@ function CertificateCard({
 
       <div className="relative aspect-[3/2] w-full overflow-hidden bg-muted/5">
         <CertImage
-          key={cert.image_url}
-          src={cert.image_url}
+          // The small copy on cards; the details and zoom use the full image
+          key={cert.thumbnail_url ?? cert.image_url}
+          src={cert.thumbnail_url ?? cert.image_url}
           alt={`${cert.title} certificate`}
           className="transition-transform duration-500 group-hover:scale-105"
         />
@@ -316,7 +318,7 @@ function VerificationViewer({
   );
 }
 
-/** Every certificate in a grid, with type filters and search — the same modal the projects have */
+/** Every certificate, with type filters and search — the same window the projects have */
 function SeeAllCertificatesModal({
   isOpen,
   onOpenChange,
@@ -332,7 +334,6 @@ function SeeAllCertificatesModal({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const gridRef = useRef<HTMLDivElement>(null);
 
   // Start from the full list every time the modal opens
   useEffect(() => {
@@ -351,6 +352,8 @@ function SeeAllCertificatesModal({
     [certificates],
   );
 
+  const issuers = useMemo(() => new Set(certificates.map((c) => c.issuer).filter(Boolean)).size, [certificates]);
+
   // Keep each certificate's index in the full list: that is what the details open
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -363,99 +366,45 @@ function SeeAllCertificatesModal({
       );
   }, [certificates, query, filter]);
 
-  useEffect(() => {
-    gridRef.current?.scrollTo({ top: 0 });
-  }, [query, filter]);
-
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        onCloseAutoFocus={onCloseAutoFocus}
-        className="w-[95vw] max-w-5xl rounded-2xl border-[var(--border-subtle)] bg-[var(--surface-modal)] shadow-2xl backdrop-blur-2xl !gap-0 !p-0 md:rounded-3xl [&>button]:z-20"
-      >
-        <div className="flex h-[85svh] flex-col overflow-hidden rounded-2xl md:h-[82vh] md:rounded-3xl" data-lenis-prevent>
-          <div className="relative shrink-0 space-y-4 border-b border-[var(--border-subtle)] bg-[var(--surface-bg-alt)] px-5 pb-4 pt-6 sm:px-8 sm:pt-8">
-            <div className="absolute left-0 right-0 top-0 h-[2px] rounded-t-2xl bg-gradient-to-r from-primary/60 via-accent/40 to-transparent md:rounded-t-3xl" />
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-foreground sm:text-xl">
-                All Certificates <span className="font-medium text-muted-foreground/60">({certificates.length})</span>
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="scrollbar-hide -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:pb-0" role="tablist" aria-label="Filter certificates by type">
-                {FILTERS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === key}
-                    onClick={() => setFilter(key)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                      filter === key
-                        ? "border-cyan-600/60 bg-cyan-500/15 text-cyan-700 dark:border-cyan-400/60 dark:bg-cyan-400/15 dark:text-cyan-300"
-                        : "border-border/50 text-muted-foreground hover:border-cyan-600/50 hover:text-foreground dark:hover:border-cyan-400/40"
-                    }`}
-                  >
-                    {label} <span className="opacity-60">{counts[key]}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative sm:w-60">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search certificates or issuer"
-                  aria-label="Search certificates"
-                  className="h-9 w-full rounded-lg border border-border/50 bg-background/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-600/70 focus:outline-none dark:focus:border-cyan-400/60"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            ref={gridRef}
-            className="scrollbar-hide min-h-0 flex-1 scroll-smooth overflow-y-auto overscroll-contain bg-[var(--surface-bg-alt)] px-4 py-6 sm:px-8"
-            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
-          >
-            {visible.length === 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground/70">No certificates match your search.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 pb-12 sm:gap-6 lg:grid-cols-3">
-                {visible.map(({ cert, index }) => (
-                  <button
-                    key={cert.id}
-                    type="button"
-                    onClick={() => onSelect(index)}
-                    className="group flex flex-col overflow-hidden rounded-xl border border-border/40 bg-background/40 text-left backdrop-blur-sm transition-all duration-500 hover:border-cyan-600/50 hover:shadow-[0_0_15px_rgba(8,145,178,0.18)] dark:hover:border-cyan-400/50 dark:hover:shadow-[0_0_15px_rgba(34,211,238,0.15)]"
-                  >
-                    <div className="relative aspect-[3/2] w-full overflow-hidden bg-muted/10">
-                      <CertImage
-                        key={cert.image_url}
-                        src={cert.image_url}
-                        alt={`${cert.title} certificate`}
-                        className="transition-transform duration-700 group-hover:scale-110"
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col gap-1 p-3 sm:p-4">
-                      <p className="line-clamp-2 text-xs font-bold leading-tight text-foreground transition-colors duration-300 group-hover:text-cyan-700 dark:group-hover:text-cyan-400 sm:text-sm">
-                        {cert.title}
-                      </p>
-                      <p className="truncate text-[10px] text-muted-foreground/60 sm:text-[11px]">
-                        {[cert.issuer, formatDate(cert.issue_date)].filter(Boolean).join(" · ")}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <BrowseDialog
+      open={isOpen}
+      onOpenChange={onOpenChange}
+      onCloseAutoFocus={onCloseAutoFocus}
+      title="All Certificates"
+      summary={`${certificates.length} certificates from ${issuers} ${issuers === 1 ? "issuer" : "issuers"}`}
+      searchLabel="Search certificates"
+      searchPlaceholder="Search certificates or issuer"
+      query={query}
+      onQueryChange={setQuery}
+      filtersLabel="Filter certificates by type"
+      filters={FILTERS.map(({ key, label }) => ({ key, label, count: counts[key] }))}
+      filter={filter}
+      onFilterChange={(key) => setFilter(key as Filter)}
+      resultCount={visible.length}
+      noun={["certificate", "certificates"]}
+      emptyText="No certificates match your search."
+      onReset={() => {
+        setQuery("");
+        setFilter("all");
+      }}
+    >
+      {visible.map(({ cert, index }) => {
+        const issued = [cert.issuer, formatDate(cert.issue_date)].filter(Boolean).join(" · ");
+        return (
+          <BrowseCard
+            key={cert.id}
+            onClick={() => onSelect(index)}
+            mediaShape="aspect-[3/2]"
+            media={<CertImage key={cert.thumbnail_url ?? cert.image_url} src={cert.thumbnail_url ?? cert.image_url} alt={`${cert.title} certificate`} className="transition-transform duration-700 group-hover:scale-110" />}
+            title={cert.title}
+            meta={issued}
+            description={issued}
+            footer={<span className="mt-auto pt-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">{kindLabel(cert)}</span>}
+          />
+        );
+      })}
+    </BrowseDialog>
   );
 }
 

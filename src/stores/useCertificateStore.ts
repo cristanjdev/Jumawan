@@ -12,6 +12,8 @@ export interface Certificate {
   credential_url?: string;
   verification_image_url?: string;
   image_url?: string;
+  /** A small copy of image_url, for the cards */
+  thumbnail_url?: string;
   description?: string;
   order_index: number;
   type?: 'participation' | 'recognition';

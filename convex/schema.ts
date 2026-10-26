@@ -33,6 +33,8 @@ export default defineSchema({
     credential_url: v.optional(v.string()),
     verification_image_url: v.optional(v.string()),
     image_url: v.optional(v.string()),
+    // A small copy of image_url for the cards (the full image stays for the details and zoom)
+    thumbnail_url: v.optional(v.string()),
     description: v.optional(v.string()),
     order_index: v.number(),
     type: v.optional(v.union(v.literal("participation"), v.literal("recognition"))),
@@ -144,6 +146,9 @@ export default defineSchema({
     icon_slug: v.string(),
     color_slug: v.string(),
     skills: v.array(v.string()),
+    // A plain-language line under the title, and the titles of projects that show the skill
+    description: v.optional(v.string()),
+    examples: v.optional(v.array(v.string())),
     order_index: v.number(),
     is_active: v.boolean(),
   }).index("by_order", ["order_index"]),

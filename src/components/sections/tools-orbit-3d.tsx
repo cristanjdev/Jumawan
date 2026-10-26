@@ -46,6 +46,36 @@ function fitName(logo: HTMLElement, box: HTMLElement) {
   name.style.marginLeft = `${Math.round(shift)}px`;
 }
 
+/** How long after the page loads to wait before building the scene, so the hero's opening animation isn't disturbed */
+const IDLE_BUILD_DELAY_MS = 2500;
+
+/** True once the page has loaded, a short delay has passed and the browser has a quiet moment */
+function useIdleAfterLoad(delay: number) {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    let timer = 0;
+    let handle = 0;
+    // Safari has no idle callbacks
+    const idleApi = window as Window & Partial<Pick<Window, "requestIdleCallback" | "cancelIdleCallback">>;
+    const whenQuiet = (done: () => void) =>
+      idleApi.requestIdleCallback ? idleApi.requestIdleCallback(done, { timeout: 3000 }) : window.setTimeout(done, 0);
+    const start = () => {
+      timer = window.setTimeout(() => {
+        handle = whenQuiet(() => setIdle(true));
+      }, delay);
+    };
+    if (document.readyState === "complete") start();
+    else window.addEventListener("load", start, { once: true });
+    return () => {
+      window.removeEventListener("load", start);
+      window.clearTimeout(timer);
+      if (idleApi.cancelIdleCallback) idleApi.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
+    };
+  }, [delay]);
+  return idle;
+}
+
 /** The logo elements of each orbit, inner → outer, as currently rendered */
 function collectLogos(wrap: HTMLElement, ringCount: number) {
   return Array.from({ length: ringCount }, (_, ring) => [...wrap.querySelectorAll<HTMLElement>(`[data-ring="${ring}"]`)]);
@@ -77,6 +107,10 @@ export function ToolsOrbit3D({
   // The logo lit by a tap (touch screens have no hover)
   const [tapped, setTapped] = useState<string | null>(null);
   const near = useInView(wrapRef, { margin: "800px 0px", once: true });
+  const idle = useIdleAfterLoad(IDLE_BUILD_DELAY_MS);
+  // One flag that only ever turns on: if it were both values, the section coming close after the idle build
+  // would change the effect's inputs and throw the finished scene away to build it again
+  const ready = near || idle;
   const inView = useInView(wrapRef, { margin: "100px 0px" });
   const pageVisible = usePageVisible();
   const dark = useThemeStore((s) => s.theme) === "dark";
@@ -89,7 +123,9 @@ export function ToolsOrbit3D({
   live.current = { active: inView && pageVisible, dark, onUnavailable };
 
   useEffect(() => {
-    if (!near || !hasTools) return;
+    // Built in idle time after the page loads, or when the section comes close if that happens first. Setting up
+    // the scene blocks the page for a moment, which used to show as a hitch in the middle of a scroll.
+    if (!ready || !hasTools) return;
     let cancelled = false;
 
     import("@/lib/orbit-scene")
@@ -118,7 +154,7 @@ export function ToolsOrbit3D({
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
-  }, [near, hasTools, ringCount, quality, reduceMotion, scrollYProgress]);
+  }, [ready, hasTools, ringCount, quality, reduceMotion, scrollYProgress]);
 
   // Tools added, removed or reordered: put the new logos on the orbits
   useEffect(() => {

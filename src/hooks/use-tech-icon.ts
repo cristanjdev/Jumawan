@@ -28,7 +28,7 @@ const FALLBACK: Record<string, string> = {
   c: `${DEVICON}/c/c-original.svg`, net: `${DEVICON}/dotnetcore/dotnetcore-original.svg`,
   angularjs: `${DEVICON}/angularjs/angularjs-original.svg`, android: `${DEVICON}/android/android-original.svg`,
   keras: `${DEVICON}/keras/keras-original.svg`, opencv: `${DEVICON}/opencv/opencv-original.svg`,
-  alpine: `${DEVICON}/alpinejs/alpinejs-original.svg`,
+  alpine: `${DEVICON}/alpinejs/alpinejs-original.svg`, git: `${DEVICON}/git/git-original.svg`, linux: `${DEVICON}/linux/linux-original.svg`,
   tanstackquery: `${SIMPLE}/reactquery`, tanstackstart: `${SIMPLE}/tanstack`, drizzleorm: `${SIMPLE}/drizzle`,
   hono: `${SIMPLE}/hono`, jwt: `${SIMPLE}/jsonwebtokens`, esp32: `${SIMPLE}/espressif`, pwa: `${SIMPLE}/pwa`,
 };
