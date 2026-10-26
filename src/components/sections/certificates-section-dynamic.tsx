@@ -395,12 +395,12 @@ function SeeAllCertificatesModal({
           <BrowseCard
             key={cert.id}
             onClick={() => onSelect(index)}
-            mediaShape="aspect-[3/2]"
+            mediaShape="md:aspect-[3/2]"
             media={<CertImage key={cert.thumbnail_url ?? cert.image_url} src={cert.thumbnail_url ?? cert.image_url} alt={`${cert.title} certificate`} className="transition-transform duration-700 group-hover:scale-110" />}
             title={cert.title}
             meta={issued}
             description={issued}
-            footer={<span className="mt-auto pt-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">{kindLabel(cert)}</span>}
+            footer={<span className="mt-auto hidden pt-1 text-[10px] md:block font-semibold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">{kindLabel(cert)}</span>}
           />
         );
       })}

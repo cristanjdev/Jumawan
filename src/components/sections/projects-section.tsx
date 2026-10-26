@@ -360,7 +360,7 @@ function SeeAllProjectsModal({
         <BrowseCard
           key={project.id}
           onClick={() => onSelect(index)}
-          mediaShape="aspect-[16/10]"
+          mediaShape="md:aspect-[16/10]"
           tag={project.category}
           media={
             project.image_url ? (

@@ -172,7 +172,8 @@ interface BrowseCardProps {
   onClick: () => void;
   /** The picture, filling a box that already has the right shape */
   media: ReactNode;
-  /** Shape of the picture box, written out in full by the caller, e.g. "aspect-[16/10]" */
+  /** Shape of the picture box from tablet width up, written out in full by the caller, e.g. "md:aspect-[16/10]". On a phone the
+   *  picture instead fills the row from top to bottom, however tall the text beside it is. */
   mediaShape: string;
   /** A small label over the picture on wide screens */
   tag?: string;
@@ -192,7 +193,7 @@ export function BrowseCard({ onClick, media, mediaShape, tag, title, meta, descr
       onClick={onClick}
       className="group flex gap-3 rounded-xl border border-border/40 bg-background/40 p-2.5 text-left transition-all duration-500 hover:border-cyan-600/50 hover:shadow-[0_0_15px_rgba(8,145,178,0.18)] dark:hover:border-cyan-400/50 dark:hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] md:flex-col md:gap-0 md:overflow-hidden md:p-0"
     >
-      <div className={`relative w-28 shrink-0 self-start overflow-hidden rounded-lg bg-muted/10 sm:w-40 md:w-full md:self-auto md:rounded-none ${mediaShape}`}>
+      <div className={`relative min-h-[4.5rem] w-28 shrink-0 self-stretch overflow-hidden rounded-lg bg-muted/10 sm:w-40 md:min-h-0 md:w-full md:self-auto md:rounded-none ${mediaShape}`}>
         {media}
         {tag && (
           <span className="absolute left-2 top-2 hidden rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium !text-white md:inline">
@@ -202,7 +203,7 @@ export function BrowseCard({ onClick, media, mediaShape, tag, title, meta, descr
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 md:p-4">
         <p className="line-clamp-2 text-sm font-bold leading-tight text-foreground transition-colors duration-300 group-hover:text-cyan-700 dark:group-hover:text-cyan-400">{title}</p>
-        {meta && <p className="text-[11px] text-muted-foreground/60 md:hidden">{meta}</p>}
+        {meta && <p className="line-clamp-2 text-[11px] text-muted-foreground/60 md:hidden">{meta}</p>}
         {description && <p className="hidden text-xs leading-relaxed text-muted-foreground/80 line-clamp-2 md:block">{description}</p>}
         {footer}
       </div>
