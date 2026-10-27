@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { isImageLoaded, markImageLoaded } from '@/lib/loaded-images'
 
 interface OptimizedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   fallbackIcon?: React.ReactNode
@@ -12,7 +13,10 @@ export const OptimizedImage = ({
   onError,
   ...props
 }: OptimizedImageProps) => {
-  const [isLoaded, setIsLoaded] = useState(false)
+  // An image already loaded elsewhere on the page (a carousel copy, a revisited card) shows at once, without a fade
+  const known = isImageLoaded(src)
+  const [isLoaded, setIsLoaded] = useState(known)
+  const [fade] = useState(!known)
   // Set once the image starts downloading; until then the placeholder stays still, so cards waiting
   // off screen (most of a carousel) don't keep a spinner animating for nothing
   const [requested, setRequested] = useState(false)
@@ -21,7 +25,7 @@ export const OptimizedImage = ({
 
   useEffect(() => {
     const img = imgRef.current
-    if (!img) return
+    if (!img || known) return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -36,9 +40,10 @@ export const OptimizedImage = ({
 
     observer.observe(img)
     return () => observer.disconnect()
-  }, [src])
+  }, [src, known])
 
   const handleLoad = () => {
+    markImageLoaded(src)
     setIsLoaded(true)
   }
 
@@ -70,8 +75,9 @@ export const OptimizedImage = ({
       <img
         ref={imgRef}
         data-src={src}
+        src={known ? src : undefined}
         alt={alt}
-        className={`transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'} ${className}`}
+        className={`${fade ? 'transition-opacity duration-300' : ''} ${isLoaded ? 'opacity-100' : 'opacity-0'} ${className}`}
         onLoad={handleLoad}
         onError={handleError}
         loading="lazy"

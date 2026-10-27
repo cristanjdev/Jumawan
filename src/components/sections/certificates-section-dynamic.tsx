@@ -12,6 +12,7 @@ import { DetailBlock, DetailDialog, FactsList } from "@/components/ui/detail-car
 import { ViewDetailsHint } from "@/components/ui/view-details-hint";
 import { ZoomableImage } from "@/components/ui/zoomable-image";
 import { useDragCarousel } from "@/hooks/use-drag-carousel";
+import { isImageLoaded, markImageLoaded } from "@/lib/loaded-images";
 import { CarouselProgress } from "@/components/ui/carousel-progress";
 import { useLatest } from "@/hooks/use-latest";
 import { useReturnFocus } from "@/hooks/use-return-focus";
@@ -69,7 +70,9 @@ const linkPill =
 
 // Image with a quiet loading state and an icon fallback. Re-key it when `src` changes.
 function CertImage({ src, alt, className }: { src?: string; alt: string; className?: string }) {
-  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  // An image already loaded elsewhere on the page (a carousel copy, a revisited card) shows at once, without a fade
+  const [state, setState] = useState<"loading" | "loaded" | "error">(() => (isImageLoaded(src) ? "loaded" : "loading"));
+  const [fade] = useState(() => !isImageLoaded(src));
 
   if (!src || state === "error") {
     return (
@@ -85,14 +88,20 @@ function CertImage({ src, alt, className }: { src?: string; alt: string; classNa
       {state === "loading" && <div className="absolute inset-0 bg-muted/20" />}
       <img
         src={src}
+        data-src={src}
         alt={alt}
-        loading="lazy"
+        // Already loaded: no reason to wait, which could leave the card blank for a moment after the loop jumps
+        loading={fade ? "lazy" : "eager"}
         decoding="async"
         draggable={false}
-        onLoad={() => setState("loaded")}
+        onLoad={() => {
+          markImageLoaded(src);
+          setState("loaded");
+        }}
         onError={() => setState("error")}
         className={cn(
-          "h-full w-full object-cover transition-opacity duration-300",
+          "h-full w-full object-cover",
+          fade && "transition-opacity duration-300",
           state === "loaded" ? "opacity-100" : "opacity-0",
           className
         )}

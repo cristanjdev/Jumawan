@@ -11,6 +11,7 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useReducedMotion } from "framer-motion";
+import { preloadImage } from "@/lib/loaded-images";
 
 /**
  * A pageable, draggable, endlessly looping carousel, used by All Projects and Certificates: 1 card on phones,
@@ -35,6 +36,8 @@ const AUTOPLAY_SLIDE_MS = 1100;
 const TURN_SLIDE_MS = 650; // a swipe, the progress bar
 
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+/** Starts at full speed and settles: after a swipe the row carries on at the finger's pace instead of stalling first */
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export interface CarouselSlot {
   /** Which item to render here */
@@ -50,6 +53,8 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
   const rowRef = useRef<HTMLDivElement | null>(null);
   const [row, setRow] = useState<HTMLDivElement | null>(null);
   const scrollRef = useCallback((node: HTMLDivElement | null) => {
+    // Every move is made here frame by frame, so the browser's own smooth scrolling stays off
+    if (node) node.style.scrollBehavior = "auto";
     rowRef.current = node;
     setRow(node);
   }, []);
@@ -113,6 +118,8 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
   const dragStartX = useRef(0);
   const dragScrollLeft = useRef(0);
   const dragStartCard = useRef(0);
+  // The finger's latest position and speed (px per ms), for how fast it was moving when it let go
+  const lastMove = useRef({ x: 0, t: 0, v: 0 });
   const animFrame = useRef(0);
   const animating = useRef(false);
   const hovering = useRef(false);
@@ -135,10 +142,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
   /** Moves the row without the CSS smooth-scroll animation */
   const jumpTo = (left: number) => {
     const el = rowRef.current;
-    if (!el) return;
-    el.style.scrollBehavior = "auto";
-    el.scrollLeft = left;
-    el.style.scrollBehavior = "";
+    if (el) el.scrollLeft = left;
   };
 
   /** Position in cards from the first real one (negative among the leading copies) */
@@ -183,7 +187,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     animating.current = false;
   };
 
-  const animateTo = (target: number, duration: number) => {
+  const animateTo = (target: number, duration: number, ease: (t: number) => number = easeInOutCubic) => {
     const el = rowRef.current;
     if (!el) return;
     stopAnimation();
@@ -197,8 +201,9 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     animating.current = true;
     const start = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      jumpTo(from + distance * easeInOutCubic(t));
+      // A frame's timestamp can be a little earlier than `start`: never let that move the row backwards first
+      const t = Math.max(0, Math.min(1, (now - start) / duration));
+      jumpTo(from + distance * ease(t));
       if (t < 1) {
         animFrame.current = requestAnimationFrame(tick);
       } else {
@@ -222,7 +227,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
    * Slides so card `target` is first, going the way of `dir` if given and otherwise by the shortest route
    * (the same spot can be reached through either end of a loop)
    */
-  const slideTo = (target: number, duration: number, dir?: 1 | -1) => {
+  const slideTo = (target: number, duration: number, dir?: 1 | -1, ease?: (t: number) => number) => {
     const { count: total, loop: looping, lead: copies } = live.current;
     const step = cardStep();
     if (!step || total === 0) return;
@@ -234,7 +239,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
       const pool = ahead.length ? ahead : options;
       index = pool.reduce((best, c) => (Math.abs(c - here) < Math.abs(best - here) ? c : best));
     }
-    animateTo((copies + index) * step, reduceMotion ? 0 : duration);
+    animateTo((copies + index) * step, reduceMotion ? 0 : duration, ease);
   };
 
   const scrollToPage = (page: number) => {
@@ -304,13 +309,14 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     if (!row || !loop) return;
     const timer = window.setTimeout(() => {
       const { count: total, perPage: size, lead: copies } = live.current;
-      for (let k = size; k < size * 3; k++) {
-        const card = row.children[copies + ((currentCard + k) % total)];
+      // The previous page too: a swipe back, or the loop's jump to the real cards, shows it again
+      for (let k = -size; k < size * 3; k++) {
+        const card = row.children[copies + ((((currentCard + k) % total) + total) % total)];
         card?.querySelectorAll<HTMLImageElement>("img[data-src]").forEach((img) => {
           const src = img.dataset.src;
           if (!src || warmed.current.has(src)) return;
           warmed.current.add(src);
-          new Image().src = src;
+          preloadImage(src);
         });
       }
     }, 300);
@@ -329,8 +335,8 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     dragStartX.current = clientX;
     dragScrollLeft.current = el.scrollLeft;
     dragStartCard.current = live.current.currentCard;
+    lastMove.current = { x: clientX, t: performance.now(), v: 0 };
     el.style.scrollSnapType = "none";
-    el.style.scrollBehavior = "auto";
     if (!isMobile) el.style.cursor = "grabbing";
   };
 
@@ -339,6 +345,9 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     if (!isDragging.current || !el) return;
     const walk = clientX - dragStartX.current;
     if (Math.abs(walk) > 5) hasDragged.current = true;
+    const now = performance.now();
+    const dt = now - lastMove.current.t;
+    if (dt > 0) lastMove.current = { x: clientX, t: now, v: (clientX - lastMove.current.x) / dt };
     el.scrollLeft = dragScrollLeft.current - walk;
   };
 
@@ -348,18 +357,26 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     isDragging.current = false;
     el.style.cursor = "";
     el.style.scrollSnapType = "";
-    el.style.scrollBehavior = "";
     touched();
 
     const { perPage: size, totalPages: pages, loop: looping } = live.current;
     const swipe = clientX - dragStartX.current;
     const startPage = Math.min(pages - 1, Math.floor(dragStartCard.current / size));
-    if (Math.abs(swipe) > 30) {
-      const dir = swipe < 0 ? 1 : -1;
+    // The slide after letting go starts at the finger's speed (a finger that had stopped counts as still) and settles
+    const speed = performance.now() - lastMove.current.t < 80 ? Math.abs(lastMove.current.v) : 0;
+    const release = (target: number, dir?: 1 | -1) => {
+      const step = cardStep();
+      const distance = step ? Math.abs((live.current.lead + target) * step - el.scrollLeft) : 0;
+      // An ease-out starts at 3 x distance / duration: pick the duration that matches the finger, within sensible bounds
+      const duration = speed > 0.05 ? Math.min(TURN_SLIDE_MS, Math.max(260, (3 * distance) / speed)) : TURN_SLIDE_MS * 0.8;
+      slideTo(target, duration, dir, easeOutCubic);
+    };
+    if (Math.abs(swipe) > 30 || speed > 0.35) {
+      const dir = (Math.abs(swipe) > 30 ? swipe : lastMove.current.v) < 0 ? 1 : -1;
       const page = looping ? startPage + dir : Math.max(0, Math.min(startPage + dir, pages - 1));
-      slideTo(pageStart(page), TURN_SLIDE_MS, dir);
+      release(pageStart(page), dir);
     } else {
-      slideTo(pageStart(startPage), TURN_SLIDE_MS);
+      release(pageStart(startPage));
     }
   };
 
