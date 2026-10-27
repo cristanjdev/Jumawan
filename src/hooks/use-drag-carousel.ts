@@ -25,6 +25,10 @@ import { preloadImage } from "@/lib/loaded-images";
  * inside a copy it moves, unseen, to the same spot among the real cards. Auto-play waits while the pointer is over
  * the row, a finger or key is on it, it is off screen, the tab is hidden or `paused` is set (a dialog is open).
  *
+ * On phones the swipe is the browser's own scrolling (it runs off the main thread, with the phone's natural momentum)
+ * and CSS scroll snapping settles it on one card per swipe; the loop's jump happens once the row has come to rest.
+ * Desktop drags with the mouse, which this hook moves itself.
+ *
  * Beside a page of cards a sliver of the neighbouring cards shows, fading out toward the edge, so it's clear
  * the row continues; on wide screens the row grows into the free space beside the heading. `layout` carries
  * the styles for that: `wrapStyle` for the element around the row, `rowStyle` for the row, `cardWidth` for each
@@ -78,7 +82,8 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
   const currentPage = Math.min(totalPages - 1, Math.floor(currentCard / perPage));
   // With more cards than fit on a page the row loops; `lead` copies are kept on each side (a page and a sliver)
   const loop = count > perPage;
-  const lead = loop ? perPage + 1 : 0;
+  // Phones keep a few more, since quick swipes in a row can pass several copies before the row comes to rest
+  const lead = loop ? perPage + (isMobile ? 3 : 1) : 0;
 
   const slots = useMemo<CarouselSlot[]>(() => {
     const real = Array.from({ length: count }, (_, index) => ({ index, clone: false, key: `r${index}` }));
@@ -101,6 +106,9 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     rowStyle: {
       paddingLeft: isMobile ? sideMobile : `${sidePad}px`,
       paddingRight: isMobile ? sideMobile : `${sidePad}px`,
+      // Phones: the browser scrolls the row and snaps it to one card per swipe (the snapping is `[data-carousel="native"]`
+      // in index.css, so a slide can pause it with an inline style and hand it back by clearing that style)
+      ...(isMobile ? { touchAction: "pan-x pan-y" } : {}),
       maskImage: mask,
       WebkitMaskImage: mask,
     },
@@ -176,7 +184,27 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     setCurrentCard((prev) => (prev === index ? prev : index));
   };
 
+  const settleTimer = useRef(0);
+  /** The row has stopped after a swipe: move, unseen, out of a copy and count the swipe as activity */
+  const settle = () => {
+    window.clearTimeout(settleTimer.current);
+    if (animating.current || isDragging.current) return;
+    wrap();
+    syncCard();
+    touched();
+  };
+
   const handleScroll = () => {
+    if (isMobile) {
+      syncCard();
+      // The row has settled once scroll events stop for a moment. `scrollend` says so sooner where it exists, but it is
+      // missing on older Safari and does not always fire after a snap, so this pause always backs it up
+      if (!animating.current) {
+        window.clearTimeout(settleTimer.current);
+        settleTimer.current = window.setTimeout(settle, 150);
+      }
+      return;
+    }
     if (isDragging.current) dragScrollLeft.current += wrap();
     else if (!animating.current) wrap();
     syncCard();
@@ -184,6 +212,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
 
   const stopAnimation = () => {
     cancelAnimationFrame(animFrame.current);
+    if (animating.current && rowRef.current) rowRef.current.style.scrollSnapType = "";
     animating.current = false;
   };
 
@@ -199,6 +228,8 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
       return;
     }
     animating.current = true;
+    // A snapping row would pull every step of the slide to the nearest card: snapping waits until the slide ends
+    el.style.scrollSnapType = "none";
     const start = performance.now();
     const tick = (now: number) => {
       // A frame's timestamp can be a little earlier than `start`: never let that move the row backwards first
@@ -208,6 +239,7 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
         animFrame.current = requestAnimationFrame(tick);
       } else {
         animating.current = false;
+        el.style.scrollSnapType = "";
         wrap();
         syncCard();
       }
@@ -301,6 +333,22 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
   }, [autoplayOn, row]);
 
   useEffect(() => stopAnimation, []);
+
+  useEffect(() => {
+    if (!row) return;
+    if (!isMobile) {
+      delete row.dataset.carousel;
+      return;
+    }
+    row.dataset.carousel = "native";
+    const onEnd = () => settle();
+    row.addEventListener("scrollend", onEnd);
+    return () => {
+      row.removeEventListener("scrollend", onEnd);
+      window.clearTimeout(settleTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row, isMobile]);
 
   // Images load once a card is nearly on screen, which would flash a spinner as each page slides in: warm the
   // next two pages' images (they carry their address in `data-src`) while the current one rests
@@ -399,10 +447,24 @@ export function useDragCarousel(count: number, { autoplay = true, paused = false
     },
     onMouseUp: (e: ReactMouseEvent) => endDrag(e.pageX),
     onMouseLeave: (e: ReactMouseEvent) => endDrag(e.pageX),
-    onTouchStart: (e: ReactTouchEvent) => startDrag(e.touches[0].clientX),
-    onTouchMove: (e: ReactTouchEvent) => moveDrag(e.touches[0].clientX),
-    onTouchEnd: (e: ReactTouchEvent) => endDrag(e.changedTouches[0].clientX),
-    onTouchCancel: (e: ReactTouchEvent) => endDrag(e.changedTouches[0].clientX),
+    onTouchStart: (e: ReactTouchEvent) => {
+      if (!isMobile) return startDrag(e.touches[0].clientX);
+      stopAnimation();
+      touched();
+      isDragging.current = true;
+    },
+    onTouchMove: (e: ReactTouchEvent) => {
+      if (!isMobile) moveDrag(e.touches[0].clientX);
+    },
+    onTouchEnd: (e: ReactTouchEvent) => {
+      if (!isMobile) return endDrag(e.changedTouches[0].clientX);
+      isDragging.current = false;
+      touched();
+    },
+    onTouchCancel: (e: ReactTouchEvent) => {
+      if (!isMobile) return endDrag(e.changedTouches[0].clientX);
+      isDragging.current = false;
+    },
     // Only a real mouse pauses auto-play by hovering: a touch screen fakes a hover that never ends
     onPointerEnter: (e: ReactPointerEvent) => {
       if (e.pointerType === "mouse") hovering.current = true;

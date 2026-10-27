@@ -35,7 +35,8 @@ export const OptimizedImage = ({
           observer.disconnect()
         }
       },
-      { threshold: 0.1 }
+      // Any part on screen: a carousel shows only a sliver of its neighbouring cards, under a tenth of their image
+      { threshold: 0 }
     )
 
     observer.observe(img)

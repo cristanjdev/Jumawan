@@ -669,3 +669,13 @@ All colors MUST be HSL.
     mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.03) 10%, rgba(0,0,0,0.12) 22%, rgba(0,0,0,0.3) 34%, rgba(0,0,0,0.55) 48%, rgba(0,0,0,0.8) 62%, rgba(0,0,0,0.95) 76%, #000 90%);
   }
 }
+
+/* Carousels on phones (use-drag-carousel): the browser scrolls the row, and each card is a snap point, one per swipe */
+[data-carousel="native"] {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+[data-carousel="native"] > * {
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
