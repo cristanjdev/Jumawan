@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { motion, type Variants } from "framer-motion";
 import { BookOpen, Cable, KeyRound, Lightbulb, LocateFixed, MessagesSquare, Nfc, QrCode, ScanEye, Zap, type LucideIcon } from "lucide-react";
 import { useSkillStore, type SkillCategory } from "@/stores/useSkillStore";
@@ -43,8 +43,9 @@ const LOGO_EDGE =
   "[filter:drop-shadow(0_0_0.5px_rgba(15,23,42,0.9))_drop-shadow(0_0_1px_rgba(15,23,42,0.45))] dark:[filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.85))]";
 
 /**
- * Opens a card's "See it in" panel. A mouse opens it by hovering (in CSS) and a keyboard by focus; on a touch screen a tap
- * toggles it, and a tap anywhere else closes it.
+ * Opens a card's projects. A mouse opens it by hovering (in CSS, only on devices with a real hover) and a keyboard by focus;
+ * on a touch screen a tap toggles it, and a tap anywhere else closes it. A tap is a click: a finger that moves to scroll never
+ * produces one, so scrolling past a card never opens it.
  */
 function useOpenOnTap() {
   const ref = useRef<HTMLDivElement>(null);
@@ -61,16 +62,25 @@ function useOpenOnTap() {
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
 
+  // What started the current press: a click that came from a finger or pen toggles the card
+  const pointer = useRef("mouse");
+
   return {
     ref,
     open,
     armed,
-    onPointerEnter: () => setArmed(true),
+    onPointerEnter: (event: ReactPointerEvent) => {
+      if (event.pointerType === "mouse") setArmed(true);
+    },
     onFocus: () => setArmed(true),
-    onPointerUp: (event: ReactPointerEvent) => {
+    onPointerDown: (event: ReactPointerEvent) => {
+      pointer.current = event.pointerType;
+    },
+    onClick: (event: ReactMouseEvent) => {
+      if (pointer.current === "mouse") return;
       setArmed(true);
-      // A tap on a project link opens that project; only a tap on the card itself toggles the panel
-      if (event.pointerType !== "mouse" && !(event.target as HTMLElement).closest("button")) setOpen((value) => !value);
+      // A tap on a project opens that project; only a tap on the card itself toggles it
+      if (!(event.target as HTMLElement).closest("button")) setOpen((value) => !value);
     },
   };
 }
@@ -133,7 +143,7 @@ function SkillCard({
   variants: Variants;
   onOpenProject: (title: string) => void;
 }) {
-  const { ref, open, armed, onPointerEnter, onFocus, onPointerUp } = useOpenOnTap();
+  const { ref, open, armed, onPointerEnter, onFocus, onPointerDown, onClick } = useOpenOnTap();
 
   return (
     <motion.div
@@ -141,12 +151,13 @@ function SkillCard({
       data-open={open}
       onPointerEnter={onPointerEnter}
       onFocus={onFocus}
-      onPointerUp={onPointerUp}
+      onPointerDown={onPointerDown}
+      onClick={onClick}
       variants={variants}
       className="group/card relative w-full md:w-[calc((100%_-_1.5rem)/2)] xl:w-[calc((100%_-_3rem)/3)] min-[1800px]:w-[calc((100%_-_4.5rem)/4)]"
     >
-      <article className="group relative flex h-full min-h-[16.5rem] flex-col items-center text-center [container-type:inline-size] rounded-2xl border border-border/50 bg-card/30 p-6 transition-all duration-500 ease-in-out hover:-translate-y-1 hover:border-cyan-400 hover:shadow-[0_0_14px_rgba(34,211,238,0.12)] group-data-[open=true]/card:border-cyan-400 sm:p-7">
-        <div className={`flex w-full items-center justify-center gap-3 [container-type:inline-size] ${examples.length > 0 ? "transition-opacity duration-500 group-hover/card:opacity-0 group-focus-within/card:opacity-0 group-data-[open=true]/card:opacity-0" : ""}`}>
+      <article className="group relative flex h-full min-h-[16.5rem] flex-col items-center text-center [container-type:inline-size] rounded-2xl border border-border/50 bg-card/30 p-6 transition-all duration-500 ease-in-out [@media(hover:hover)]:hover:-translate-y-1 [@media(hover:hover)]:hover:border-cyan-400 [@media(hover:hover)]:hover:shadow-[0_0_14px_rgba(34,211,238,0.12)] group-data-[open=true]/card:border-cyan-400 sm:p-7">
+        <div className={`flex w-full items-center justify-center gap-3 [container-type:inline-size] ${examples.length > 0 ? "transition-opacity duration-500 [@media(hover:hover)]:group-hover/card:opacity-0 group-has-[:focus-visible]/card:opacity-0 group-data-[open=true]/card:opacity-0" : ""}`}>
           <category.icon className={`h-6 w-6 shrink-0 ${category.color}`} strokeWidth={1.75} />
           <h3 className="min-w-0 truncate font-semibold leading-snug tracking-tight text-foreground" style={{ fontSize: titleSize }}>
             {category.title}
@@ -155,7 +166,7 @@ function SkillCard({
 
         {/* The card's content. On hover (a tap on a touch screen, focus from the keyboard) all of it, title included, fades
             out and the projects' screenshots fade in over the same space, so the card never changes size. */}
-        <div className="flex w-full flex-1 flex-col items-center transition-opacity duration-500 group-hover/card:opacity-0 group-focus-within/card:opacity-0 group-data-[open=true]/card:opacity-0">
+        <div className="flex w-full flex-1 flex-col items-center transition-opacity duration-500 [@media(hover:hover)]:group-hover/card:opacity-0 group-has-[:focus-visible]/card:opacity-0 group-data-[open=true]/card:opacity-0">
           {category.description && <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{category.description}</p>}
 
           <ul className="mt-5 grid w-full grid-cols-3 gap-x-1 gap-y-2.5" aria-label={`${category.title} skills`}>
@@ -166,7 +177,7 @@ function SkillCard({
         </div>
 
         {examples.length > 0 && (
-          <div className="pointer-events-none absolute inset-x-6 inset-y-4 flex translate-y-2 flex-col justify-center opacity-0 transition-[opacity,transform] duration-500 ease-out group-hover/card:pointer-events-auto group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 group-data-[open=true]/card:pointer-events-auto group-data-[open=true]/card:translate-y-0 group-data-[open=true]/card:opacity-100 sm:inset-x-8">
+          <div className="pointer-events-none absolute inset-x-6 inset-y-4 flex translate-y-2 flex-col justify-center opacity-0 transition-[opacity,transform] duration-500 ease-out [@media(hover:hover)]:group-hover/card:pointer-events-auto [@media(hover:hover)]:group-hover/card:translate-y-0 [@media(hover:hover)]:group-hover/card:opacity-100 group-has-[:focus-visible]/card:pointer-events-auto group-has-[:focus-visible]/card:translate-y-0 group-has-[:focus-visible]/card:opacity-100 group-data-[open=true]/card:pointer-events-auto group-data-[open=true]/card:translate-y-0 group-data-[open=true]/card:opacity-100 sm:inset-x-8">
             {/* Small framed thumbnails, two across, the project's name beneath each. An odd last one sits centred. */}
             <ul className="grid grid-cols-2 gap-x-4 gap-y-3.5">
               {examples.map(({ title, image }, i) => (

@@ -30,11 +30,17 @@ function useFrontOnTap() {
         return () => document.removeEventListener("pointerdown", close);
     }, [front]);
 
+    // What started the current press. A tap is a click, which a finger moving to scroll never produces
+    const pointer = useRef("mouse");
+
     return {
         ref,
         "data-front": front,
-        onPointerUp: (event: ReactPointerEvent) => {
-            if (event.pointerType !== "mouse") setFront((value) => !value);
+        onPointerDown: (event: ReactPointerEvent) => {
+            pointer.current = event.pointerType;
+        },
+        onClick: () => {
+            if (pointer.current !== "mouse") setFront((value) => !value);
         },
     };
 }
@@ -181,7 +187,7 @@ export function AboutSection() {
                                                             alt={item.label || "About me photo"}
                                                             loading="lazy"
                                                             decoding="async"
-                                                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 [@media(hover:hover)]:group-hover:scale-105"
                                                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 42vw"
                                                         />
                                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
@@ -208,7 +214,7 @@ export function AboutSection() {
                                                         className={`rounded-full transition-all duration-300 ${
                                                             i === currentSlide
                                                                 ? "w-2 h-2 bg-white"
-                                                                : "w-1.5 h-1.5 bg-white/40 hover:bg-white/60"
+                                                                : "w-1.5 h-1.5 bg-white/40 [@media(hover:hover)]:hover:bg-white/60"
                                                         }`}
                                                     />
                                                 ))}
@@ -237,7 +243,7 @@ export function AboutSection() {
                     </div>
 
                     {/* How I work */}
-                    <motion.div variants={itemVariants} className="mt-14 md:mt-20 rounded-2xl border border-border/50 p-6 sm:p-8 lg:p-10 transition-all duration-500 hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]">
+                    <motion.div variants={itemVariants} className="mt-14 md:mt-20 rounded-2xl border border-border/50 p-6 sm:p-8 lg:p-10 transition-all duration-500 [@media(hover:hover)]:hover:border-cyan-400 [@media(hover:hover)]:hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]">
                         <div className="grid lg:grid-cols-[1fr_1.4fr] gap-8 lg:gap-12 items-start">
                             <div className="text-center lg:text-left">
                                 <h3 className="font-heading text-2xl font-bold tracking-tight text-foreground">How I work</h3>
@@ -269,7 +275,7 @@ export function AboutSection() {
                         <motion.div
                             {...blutechCard}
                             variants={itemVariants}
-                            className="group relative isolate overflow-hidden rounded-2xl border border-border/50 p-6 sm:p-8 transition-all duration-500 hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]"
+                            className="group relative isolate overflow-hidden rounded-2xl border border-border/50 p-6 sm:p-8 transition-all duration-500 [@media(hover:hover)]:hover:border-cyan-400 data-[front=true]:border-cyan-400 [@media(hover:hover)]:hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]"
                         >
                             {/* The logo sits behind the text as a soft watermark: centred on a phone, to the right from tablet up.
                                 On hover (tap on a touch screen) it zooms in to the front, full strength, and the text steps back. */}
@@ -293,7 +299,7 @@ export function AboutSection() {
                         <motion.div
                             {...beyondCard}
                             variants={itemVariants}
-                            className="group relative isolate overflow-hidden rounded-2xl border border-border/50 p-6 sm:p-8 transition-all duration-500 hover:border-cyan-400 hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]"
+                            className="group relative isolate overflow-hidden rounded-2xl border border-border/50 p-6 sm:p-8 transition-all duration-500 [@media(hover:hover)]:hover:border-cyan-400 data-[front=true]:border-cyan-400 [@media(hover:hover)]:hover:shadow-[0_0_10px_rgba(34,211,238,0.1)]"
                         >
                             {/* A photo of me at my gaming setup behind the text. It fades in from the left so the text stays readable; on hover
                                 (a tap on a touch screen) it zooms in and comes to full strength while the text steps back. */}
