@@ -14,6 +14,7 @@ import {
   buildResumeStorageFetchUrls,
   extractStorageId,
   fetchFirstOk,
+  resolveConvexSiteOrigin,
 } from "@/lib/convexSite";
 
 const FULL_NAME = "Cristan Jade Jumawan";
@@ -156,6 +157,7 @@ export function HeroSection() {
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [previewBlobType, setPreviewBlobType] = useState<string>('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
   // Resume modal zoom + drag — same state pattern as verification modal
   const [resumeZoom, setResumeZoom] = useState(1);
   const [resumePos, setResumePos] = useState({ x: 0, y: 0 });
@@ -222,9 +224,10 @@ export function HeroSection() {
     return () => document.removeEventListener('keydown', onKey);
   }, [isResumeModalOpen]);
 
-  // Fetch file as a blob URL when modal opens so the iframe uses a same-origin
-  // blob: URL — this bypasses browser ad/tracker blockers (e.g. Opera) that
-  // block the convex.site domain when loaded as an iframe src.
+  // When the modal opens, fetch the resume and turn it into an image we draw ourselves. A PDF is
+  // rendered with pdf.js rather than put in an <iframe>: browsers' own PDF viewers are blocked in
+  // sandboxed frames (Opera/Chrome/Edge show ERR_BLOCKED_BY_CLIENT) and phones mostly can't show one
+  // in a frame at all, so this looks the same everywhere and gets the zoom / drag controls.
   useEffect(() => {
     if (!isResumeModalOpen) {
       // Revoke old blob URL to free memory
@@ -232,6 +235,7 @@ export function HeroSection() {
         URL.revokeObjectURL(previewBlobUrl);
         setPreviewBlobUrl(null);
       }
+      setPreviewFailed(false);
       return;
     }
 
@@ -239,11 +243,14 @@ export function HeroSection() {
       setPreviewLoading(false);
       setPreviewBlobType("");
       setPreviewBlobUrl(null);
+      setPreviewFailed(true);
       return;
     }
 
+    let cancelled = false;
     const buildPreview = async () => {
       setPreviewLoading(true);
+      setPreviewFailed(false);
       try {
         const sid = extractStorageId(resumeUrl);
         const tryUrls = sid
@@ -251,19 +258,35 @@ export function HeroSection() {
           : [resumeUrl];
 
         const res = await fetchFirstOk(tryUrls);
-        const blob = await res.blob();
-        setPreviewBlobType(blob.type || "");
+        let blob = await res.blob();
+
+        // Storage may not label the file, so check the bytes too
+        const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+        const isPdf = blob.type === "application/pdf" || String.fromCharCode(...head) === "%PDF-";
+        if (isPdf) {
+          const { renderPdfToImage } = await import("@/lib/pdfToImage");
+          blob = await renderPdfToImage(await blob.arrayBuffer());
+        }
+        if (!blob.type.startsWith("image/")) throw new Error(`Can't preview ${blob.type || "this file"}`);
+        if (cancelled) return;
+
+        setPreviewBlobType(blob.type);
         setPreviewBlobUrl(URL.createObjectURL(blob));
       } catch (err) {
-        console.warn("Preview fetch failed, falling back to direct URL", err);
+        if (cancelled) return;
+        console.warn("Resume preview failed", err);
         setPreviewBlobType("");
         setPreviewBlobUrl(null);
+        setPreviewFailed(true);
       } finally {
-        setPreviewLoading(false);
+        if (!cancelled) setPreviewLoading(false);
       }
     };
 
     buildPreview();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isResumeModalOpen, resumeUrl]);
 
@@ -296,6 +319,13 @@ export function HeroSection() {
 
   const scrollToContact = () => {
     scrollToSection("contact");
+  };
+
+  // The saved link downloads the file; for "open in a tab" use the plain storage URL, which shows it inline
+  const resumeInlineUrl = (url: string) => {
+    const sid = extractStorageId(url);
+    const origin = sid ? resolveConvexSiteOrigin(url) : null;
+    return sid && origin ? `${origin}/getImage?storageId=${encodeURIComponent(sid)}` : url;
   };
 
   const handleOpenResume = () => {
@@ -803,17 +833,38 @@ export function HeroSection() {
                         }}
                       />
                     </div>
-                  ) : (
-                    // PDF — iframe (blob: URL, never blocked)
-                    <iframe
-                      key={previewBlobUrl || resumeUrl}
-                      src={previewBlobUrl || resumeUrl}
-                      className="absolute inset-0 w-full h-full"
-                      style={{ border: 'none', background: '#fff' }}
-                      title="Resume Preview"
-                      sandbox="allow-scripts allow-same-origin"
-                    />
-                  )}
+                  ) : previewFailed ? (
+                    // Couldn't draw a preview (offline, unsupported file, …): offer the file itself
+                    <div className="relative flex flex-col items-center gap-4 px-6 text-center">
+                      <FileText className="h-10 w-10 text-foreground/40" />
+                      <p className="max-w-xs text-sm text-foreground/70">
+                        The preview couldn&apos;t be shown here. You can still download the resume or open it in a new tab.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleModalDownload}
+                          disabled={isDownloading || !resumeUrl?.trim()}
+                          className="flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-semibold transition-all duration-200 hover:bg-muted/10 active:scale-95 disabled:opacity-50"
+                          style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          {isDownloading ? 'Saving…' : 'Download'}
+                        </button>
+                        {resumeUrl?.trim() && (
+                          <a
+                            href={resumeInlineUrl(resumeUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg border px-3.5 py-2 text-xs font-semibold transition-all duration-200 hover:bg-muted/10 active:scale-95"
+                            style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
+                          >
+                            Open in new tab
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* Zoom controls — shown for images (same as certificate modal) */}
                   {isImage && !previewLoading && previewBlobUrl && (
