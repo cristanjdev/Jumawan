@@ -9,7 +9,7 @@ import { useHeroSettingsStore } from "@/stores/useHeroSettingsStore";
 import { HeroPortrait } from "@/components/portrait/hero-portrait";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
 import { useMotionBudget } from "@/stores/usePerformanceStore";
-import { ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomableImage } from "@/components/ui/zoomable-image";
 import {
   buildResumeStorageFetchUrls,
   extractStorageId,
@@ -158,12 +158,6 @@ export function HeroSection() {
   const [previewBlobType, setPreviewBlobType] = useState<string>('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
-  // Resume modal zoom + drag — same state pattern as verification modal
-  const [resumeZoom, setResumeZoom] = useState(1);
-  const [resumePos, setResumePos] = useState({ x: 0, y: 0 });
-  const [resumeDragStart, setResumeDragStart] = useState({ x: 0, y: 0 });
-  const [resumeDragging, setResumeDragging] = useState(false);
-  const resumeContainerRef = useRef<HTMLDivElement>(null);
   const [animationsReady, setAnimationsReady] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -208,16 +202,10 @@ export function HeroSection() {
 
   // Close resume modal on Esc key + reset zoom
   useEffect(() => {
-    if (!isResumeModalOpen) {
-      setResumeZoom(1);
-      setResumePos({ x: 0, y: 0 });
-      return;
-    }
+    if (!isResumeModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsResumeModalOpen(false);
-        setResumeZoom(1);
-        setResumePos({ x: 0, y: 0 });
       }
     };
     document.addEventListener('keydown', onKey);
@@ -683,29 +671,6 @@ export function HeroSection() {
         {isResumeModalOpen && (() => {
           const isImage = previewBlobType.startsWith('image/');
 
-          // Handlers mirror verification modal exactly (state-based dragStart, useCallback-equivalent inline)
-          const handleWheel = (e: React.WheelEvent) => {
-            e.preventDefault(); e.stopPropagation();
-            const next = Math.min(Math.max(resumeZoom + (e.deltaY > 0 ? -0.1 : 0.1), 1), 4);
-            setResumeZoom(next);
-            if (next === 1) setResumePos({ x: 0, y: 0 });
-          };
-          const handleMouseDown = (e: React.MouseEvent) => {
-            setResumeDragging(true);
-            setResumeDragStart({ x: e.clientX - resumePos.x, y: e.clientY - resumePos.y });
-          };
-          const handleMouseMove = (e: React.MouseEvent) => {
-            if (!resumeDragging) return;
-            e.preventDefault();
-            setResumePos({ x: e.clientX - resumeDragStart.x, y: e.clientY - resumeDragStart.y });
-          };
-          const stopDrag = () => {
-            setResumeDragging(false);
-            setTimeout(() => setResumePos({ x: 0, y: 0 }), 50);
-          };
-          const zoomOut = () => { const z = Math.max(resumeZoom - 0.25, 1); setResumeZoom(z); if (z === 1) setResumePos({ x: 0, y: 0 }); };
-          const zoomIn = () => setResumeZoom(Math.min(resumeZoom + 0.25, 4));
-
           return (
             <motion.div
               key="resume-modal-overlay"
@@ -715,7 +680,7 @@ export function HeroSection() {
               transition={{ duration: 0.22 }}
               className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5"
               style={{ background: 'rgba(5, 10, 24, 0.85)' }}
-              onClick={(e) => { if (e.target === e.currentTarget) { setIsResumeModalOpen(false); setResumeZoom(1); setResumePos({ x: 0, y: 0 }); } }}
+              onClick={(e) => { if (e.target === e.currentTarget) setIsResumeModalOpen(false); }}
             >
               {/* Blur layer — separate from card so card content is never blurred */}
               <div className="absolute inset-0 pointer-events-none" style={{ backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' }} />
@@ -769,7 +734,7 @@ export function HeroSection() {
                       <span className="hidden sm:inline">{isDownloading ? 'Saving…' : 'Download'}</span>
                     </button>
                     <button
-                      onClick={() => { setIsResumeModalOpen(false); setResumeZoom(1); setResumePos({ x: 0, y: 0 }); }}
+                      onClick={() => setIsResumeModalOpen(false)}
                       className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-muted/10 border"
                       style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
                     >
@@ -778,32 +743,8 @@ export function HeroSection() {
                   </div>
                 </div>
 
-                {/* ── Preview area ── */}
-                <div
-                  ref={resumeContainerRef}
-                  className={`relative flex-1 min-h-0 bg-[var(--surface-bg)] flex items-center justify-center overflow-hidden overscroll-contain ${
-                    resumeDragging ? 'cursor-grabbing' : isImage ? 'cursor-grab' : 'cursor-default'
-                  }`}
-                  style={{ overflow: 'hidden' }}
-                  onWheel={isImage ? handleWheel : undefined}
-                  onMouseDown={isImage ? handleMouseDown : undefined}
-                  onMouseMove={isImage ? handleMouseMove : undefined}
-                  onMouseUp={isImage ? stopDrag : undefined}
-                  onMouseLeave={isImage ? stopDrag : undefined}
-                  onTouchStart={isImage ? (e) => {
-                    if (e.touches.length === 1) {
-                      setResumeDragging(true);
-                      setResumeDragStart({ x: e.touches[0].clientX - resumePos.x, y: e.touches[0].clientY - resumePos.y });
-                    }
-                  } : undefined}
-                  onTouchMove={isImage ? (e) => {
-                    if (!resumeDragging || e.touches.length !== 1) return;
-                    e.preventDefault();
-                    setResumePos({ x: e.touches[0].clientX - resumeDragStart.x, y: e.touches[0].clientY - resumeDragStart.y });
-                  } : undefined}
-                  onTouchEnd={isImage ? stopDrag : undefined}
-                  onDoubleClick={isImage ? () => { const next = resumeZoom > 1 ? 1 : 2; setResumeZoom(next); if (next === 1) setResumePos({ x: 0, y: 0 }); } : undefined}
-                >
+                {/* ── Preview area: starts below the header so the controls never cover the page ── */}
+                <div className="relative mt-14 flex min-h-0 flex-1 items-center justify-center overflow-hidden overscroll-contain bg-[var(--surface-bg)] sm:mt-16">
                   {/* Subtle radial glow */}
                   <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at center, hsl(202 85% 30% / 0.06) 0%, transparent 70%)' }} />
 
@@ -813,26 +754,8 @@ export function HeroSection() {
                       <p className="text-xs text-foreground/50">Loading preview…</p>
                     </div>
                   ) : isImage && previewBlobUrl ? (
-                    // Image resume — zoomable, draggable
-                    <div
-                      className="relative w-full h-full flex items-center justify-center"
-                      style={{ padding: '52px 12px 48px' }}
-                      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    >
-                      <img
-                        src={previewBlobUrl}
-                        alt="Resume preview"
-                        draggable={false}
-                        className={`select-none max-w-full max-h-full object-contain shadow-2xl pointer-events-none ${
-                          resumeDragging ? '' : 'transition-transform duration-700'
-                        }`}
-                        style={{
-                          transform: `translate(${resumePos.x}px, ${resumePos.y}px) scale(${resumeZoom})`,
-                          transformOrigin: 'center center',
-                          transitionTimingFunction: resumeDragging ? 'none' : 'cubic-bezier(0.19, 1, 0.22, 1)',
-                        }}
-                      />
-                    </div>
+                    // Same viewer as the projects: wheel / pinch / buttons / double-click, drag to pan when zoomed
+                    <ZoomableImage key={previewBlobUrl} src={previewBlobUrl} alt="Resume preview" />
                   ) : previewFailed ? (
                     // Couldn't draw a preview (offline, unsupported file, …): offer the file itself
                     <div className="relative flex flex-col items-center gap-4 px-6 text-center">
@@ -866,35 +789,6 @@ export function HeroSection() {
                     </div>
                   ) : null}
 
-                  {/* Zoom controls — shown for images (same as certificate modal) */}
-                  {isImage && !previewLoading && previewBlobUrl && (
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-                      <button
-                        type="button"
-                        onClick={zoomOut}
-                        className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                        style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                        title="Zoom out"
-                      >
-                        <ZoomOut className="h-4 w-4" />
-                      </button>
-                      <div
-                        className="text-xs px-3 py-1.5 rounded-full border pointer-events-none min-w-[52px] text-center backdrop-blur-sm"
-                        style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                      >
-                        {Math.round(resumeZoom * 100)}%
-                      </div>
-                      <button
-                        type="button"
-                        onClick={zoomIn}
-                        className="p-1.5 rounded-full backdrop-blur-sm transition-all duration-200 border hover:bg-muted/10"
-                        style={{ background: 'var(--modal-btn-bg)', borderColor: 'var(--modal-btn-border)', color: 'var(--modal-btn-text)' }}
-                        title="Zoom in"
-                      >
-                        <ZoomIn className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
                 </div>
               </motion.div>
             </motion.div>
