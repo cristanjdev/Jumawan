@@ -699,27 +699,23 @@ export function HeroSection() {
                     overflow: 'hidden',
                   }}
                 >
-                {/* ── Header ── */}
+                {/* ── Header: one row, the preview starts right under it ── */}
                 <div
-                  className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 pointer-events-none"
-                  style={{ background: 'linear-gradient(to bottom, var(--modal-header-bg, hsl(220 40% 6% / 0.95)) 0%, transparent 100%)' }}
+                  className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"
+                  style={{ borderColor: 'var(--modal-btn-border)' }}
                 >
                   {/* Title */}
-                  <div className="flex items-center gap-2.5 pointer-events-auto">
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'hsl(202 85% 55% / 0.15)', border: '1px solid hsl(202 85% 55% / 0.25)' }}
-                    >
-                      <FileText className="w-3.5 h-3.5" style={{ color: 'hsl(202 85% 65%)' }} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm font-semibold text-foreground/90 leading-tight">Jumawan — Resume</p>
-                      <p className="text-[10px] sm:text-[11px] text-foreground/50">Cristan Jade Jumawan</p>
-                    </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0" style={{ color: 'hsl(202 85% 55%)' }} />
+                    <p className="truncate text-[13px] font-semibold leading-none text-foreground/90 sm:text-sm">
+                      Resume
+                      <span className="mx-1.5 font-normal sm:mx-2 text-foreground/30">·</span>
+                      <span className="font-normal text-foreground/55">Cristan Jade Jumawan</span>
+                    </p>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pointer-events-auto">
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
                       onClick={handleModalDownload}
                       disabled={isDownloading}
@@ -743,8 +739,8 @@ export function HeroSection() {
                   </div>
                 </div>
 
-                {/* ── Preview area: starts below the header so the controls never cover the page ── */}
-                <div className="relative mt-14 flex min-h-0 flex-1 items-center justify-center overflow-hidden overscroll-contain bg-[var(--surface-bg)] sm:mt-16">
+                {/* ── Preview area ── */}
+                <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden overscroll-contain bg-[var(--surface-bg)]">
                   {/* Subtle radial glow */}
                   <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at center, hsl(202 85% 30% / 0.06) 0%, transparent 70%)' }} />
 
