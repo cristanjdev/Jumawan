@@ -1,7 +1,8 @@
 import { query, mutation } from "./_generated/server";
+import { adminQuery } from "./auth";
 import { v } from "convex/values";
 
-export const list = query({
+export const list = adminQuery({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const q = ctx.db.query("analytics").order("desc");
@@ -12,7 +13,7 @@ export const list = query({
   },
 });
 
-export const getByDateRange = query({
+export const getByDateRange = adminQuery({
   args: { days: v.number() },
   handler: async (ctx, args) => {
     const endDate = Date.now();
@@ -77,16 +78,35 @@ export const getByDateRange = query({
   },
 });
 
+const MAX_EVENT_DATA_CHARS = 2000;
+const clip = (value: string | undefined, max: number) => (value ? value.slice(0, max) : undefined);
+
+// Public: anonymous usage events from the site. No IP address or browser details are stored, and
+// every field is size-limited so the table can't be filled with junk.
 export const track = mutation({
   args: {
     event_type: v.string(),
     event_data: v.optional(v.any()),
+    // Accepted for older clients, but not stored
     user_agent: v.optional(v.string()),
     ip_address: v.optional(v.string()),
     referrer: v.optional(v.string()),
     page_url: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("analytics", args);
+    const event_type = args.event_type.trim().slice(0, 64);
+    if (!/^[a-z0-9_.:-]+$/i.test(event_type)) return null;
+
+    let event_data = args.event_data;
+    if (event_data !== undefined && JSON.stringify(event_data).length > MAX_EVENT_DATA_CHARS) {
+      event_data = undefined;
+    }
+
+    return await ctx.db.insert("analytics", {
+      event_type,
+      event_data,
+      referrer: clip(args.referrer, 300),
+      page_url: clip(args.page_url, 300),
+    });
   },
 });

@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { adminMutation } from "./auth";
 import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 
@@ -53,7 +54,7 @@ export const getByType = query({
   },
 });
 
-export const create = mutation({
+export const create = adminMutation({
   args: {
     type: settingType,
     value: v.string(),
@@ -65,7 +66,7 @@ export const create = mutation({
   },
 });
 
-export const update = mutation({
+export const update = adminMutation({
   args: {
     id: v.id("hero_settings"),
     value: v.optional(v.string()),
@@ -83,14 +84,14 @@ export const update = mutation({
   },
 });
 
-export const remove = mutation({
+export const remove = adminMutation({
   args: { id: v.id("hero_settings") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
   },
 });
 
-export const reorder = mutation({
+export const reorder = adminMutation({
   args: {
     items: v.array(v.object({ id: v.id("hero_settings"), order_index: v.number() })),
   },
@@ -101,7 +102,7 @@ export const reorder = mutation({
   },
 });
 
-export const toggleActive = mutation({
+export const toggleActive = adminMutation({
   args: { id: v.id("hero_settings"), is_active: v.boolean() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, { is_active: args.is_active });
@@ -109,7 +110,7 @@ export const toggleActive = mutation({
   },
 });
 
-export const updateResume = mutation({
+export const updateResume = adminMutation({
   args: { url: v.string() },
   handler: async (ctx, args) => {
     const all = await ctx.db.query("hero_settings").withIndex("by_type").collect();
@@ -129,7 +130,7 @@ export const updateResume = mutation({
   },
 });
 
-export const updateProfileImage = mutation({
+export const updateProfileImage = adminMutation({
   args: { url: v.string() },
   handler: async (ctx, args) => {
     const all = await ctx.db.query("hero_settings").withIndex("by_type").collect();
@@ -149,7 +150,7 @@ export const updateProfileImage = mutation({
   },
 });
 
-export const updateHoverLogo = mutation({
+export const updateHoverLogo = adminMutation({
   args: { url: v.string() },
   handler: async (ctx, args) => {
     const all = await ctx.db.query("hero_settings").withIndex("by_type").collect();
@@ -169,12 +170,12 @@ export const updateHoverLogo = mutation({
   },
 });
 
-export const updatePortraitStyle = mutation({
+export const updatePortraitStyle = adminMutation({
   args: { style: portraitStyle },
   handler: async (ctx, args) => upsertSingle(ctx, "portrait_style", args.style),
 });
 
-export const updateDepthMap = mutation({
+export const updateDepthMap = adminMutation({
   args: { url: v.string() },
   handler: async (ctx, args) => upsertSingle(ctx, "depth_map", args.url),
 });

@@ -1,5 +1,8 @@
-import { mutation } from "./_generated/server";
+import { adminMutation } from "./auth";
 
-export const generateUploadUrl = mutation(async (ctx) => {
-  return await ctx.storage.generateUploadUrl();
+/** Short-lived URL for uploading a file to storage. Admin only, so nobody else can use the storage. */
+export const generateUploadUrl = adminMutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
 });

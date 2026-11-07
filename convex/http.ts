@@ -1,12 +1,24 @@
 import { httpRouter } from "convex/server";
-import { httpAction } from "./_generated/server";
+import { httpAction, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 const http = httpRouter();
 
 /** Required on every response so cross-origin fetch() does not fail CORS on 4xx/5xx. */
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
+  // Serve files as the type they were stored with; never let the browser guess
+  "X-Content-Type-Options": "nosniff",
 };
+
+/** Looks up a stored file; a malformed id is treated as "not found" instead of a server error. */
+async function getStored(ctx: ActionCtx, storageId: string) {
+  try {
+    return await ctx.storage.get(storageId as Id<"_storage">);
+  } catch {
+    return null;
+  }
+}
 
 http.route({
   path: "/getImage",
@@ -19,7 +31,7 @@ http.route({
       return new Response("Missing storageId", { status: 400, headers: CORS });
     }
 
-    const blob = await ctx.storage.get(storageId as any);
+    const blob = await getStored(ctx, storageId);
     if (!blob) {
       return new Response("Image not found", { status: 404, headers: CORS });
     }
@@ -33,53 +45,27 @@ http.route({
   }),
 });
 
-http.route({
-  path: "/downloadFile",
-  method: "GET",
-  handler: httpAction(async (_ctx, request) => {
-    const url = new URL(request.url);
-    const fileUrl = url.searchParams.get("url");
-    const filename = url.searchParams.get("filename") || "download";
-
-    if (!fileUrl) {
-      return new Response("Missing url", { status: 400, headers: CORS });
-    }
-
-    // Fetch the file server-side (no CORS restrictions)
-    const response = await fetch(fileUrl);
-    if (!response.ok) {
-      return new Response("Failed to fetch file", { status: 502, headers: CORS });
-    }
-
-    const blob = await response.blob();
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
-
-    return new Response(blob, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Cache-Control": "no-cache",
-        ...CORS,
-      },
-    });
-  }),
-});
-
-// Download directly from Convex storage by storageId — avoids self-referencing
-// HTTP fetch that breaks the /downloadFile proxy when the file lives in Convex.
+// Download a stored file (the resume) with a friendly file name.
+// (There used to be a /downloadFile?url= route that fetched any URL for anyone. It was unused and an
+// open proxy, so it was removed.)
 http.route({
   path: "/downloadByStorageId",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const storageId = url.searchParams.get("storageId");
-    const filename = url.searchParams.get("filename") || "Jumawan-Resume";
+    // Keep the name to safe characters (it goes into a header) and drop any extension it already has
+    const filename =
+      (url.searchParams.get("filename") || "Jumawan-Resume")
+        .replace(/\.[a-z0-9]{1,5}$/i, "")
+        .replace(/[^\w.-]+/g, "-")
+        .slice(0, 100) || "Jumawan-Resume";
 
     if (!storageId) {
       return new Response("Missing storageId", { status: 400, headers: CORS });
     }
 
-    const blob = await ctx.storage.get(storageId as any);
+    const blob = await getStored(ctx, storageId);
     if (!blob) {
       return new Response("File not found", { status: 404, headers: CORS });
     }

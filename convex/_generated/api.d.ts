@@ -10,6 +10,7 @@
 
 import type * as aboutSectionImages from "../aboutSectionImages.js";
 import type * as analytics from "../analytics.js";
+import type * as auth from "../auth.js";
 import type * as certificates from "../certificates.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as dashboard from "../dashboard.js";
@@ -31,6 +32,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   aboutSectionImages: typeof aboutSectionImages;
   analytics: typeof analytics;
+  auth: typeof auth;
   certificates: typeof certificates;
   contactMessages: typeof contactMessages;
   dashboard: typeof dashboard;

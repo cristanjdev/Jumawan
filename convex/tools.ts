@@ -1,4 +1,5 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
+import { adminMutation } from "./auth";
 import { v } from "convex/values";
 
 export const list = query({
@@ -23,7 +24,7 @@ export const getById = query({
   },
 });
 
-export const create = mutation({
+export const create = adminMutation({
   args: {
     name: v.string(),
     icon_url: v.string(),
@@ -36,7 +37,7 @@ export const create = mutation({
   },
 });
 
-export const update = mutation({
+export const update = adminMutation({
   args: {
     id: v.id("tools"),
     name: v.optional(v.string()),
@@ -56,14 +57,14 @@ export const update = mutation({
   },
 });
 
-export const remove = mutation({
+export const remove = adminMutation({
   args: { id: v.id("tools") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
   },
 });
 
-export const toggleActive = mutation({
+export const toggleActive = adminMutation({
   args: { id: v.id("tools"), is_active: v.boolean() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, { is_active: args.is_active });
@@ -72,7 +73,7 @@ export const toggleActive = mutation({
 });
 
 // Migration: fix broken Supabase icon URLs → devicon CDN
-export const fixBrokenIconUrls = mutation({
+export const fixBrokenIconUrls = internalMutation({
   args: {},
   handler: async (ctx) => {
     const cdnBase = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
@@ -246,7 +247,7 @@ export const fixBrokenIconUrls = mutation({
 });
 
 // Migration: remove order_index and ring fields from all tools
-export const removeExtraFields = mutation({
+export const removeExtraFields = internalMutation({
   args: {},
   handler: async (ctx) => {
     const all = await ctx.db.query("tools").collect();

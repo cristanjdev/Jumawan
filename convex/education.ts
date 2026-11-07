@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { adminMutation } from "./auth";
 import { v } from "convex/values";
 
 const achievement = v.object({
@@ -24,7 +25,7 @@ export const getById = query({
   },
 });
 
-export const create = mutation({
+export const create = adminMutation({
   args: {
     degree: v.string(),
     level: v.string(),
@@ -46,7 +47,7 @@ export const create = mutation({
   },
 });
 
-export const update = mutation({
+export const update = adminMutation({
   args: {
     id: v.id("education"),
     degree: v.optional(v.string()),
@@ -74,7 +75,7 @@ export const update = mutation({
   },
 });
 
-export const remove = mutation({
+export const remove = adminMutation({
   args: { id: v.id("education") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);

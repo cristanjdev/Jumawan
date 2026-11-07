@@ -158,4 +158,9 @@ export default defineSchema({
     token: v.string(),
     expires_at: v.number(),
   }).index("by_token", ["token"]),
+
+  // Failed admin sign-ins, used to pause sign-in after too many wrong passwords
+  admin_login_attempts: defineTable({
+    at: v.number(),
+  }).index("by_time", ["at"]),
 });

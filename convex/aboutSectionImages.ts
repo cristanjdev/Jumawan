@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { adminMutation } from "./auth";
 import { v } from "convex/values";
 
 export const list = query({
@@ -22,7 +23,7 @@ export const listActive = query({
   },
 });
 
-export const create = mutation({
+export const create = adminMutation({
   args: {
     image_url: v.string(),
     label: v.string(),
@@ -39,7 +40,7 @@ export const create = mutation({
   },
 });
 
-export const update = mutation({
+export const update = adminMutation({
   args: {
     id: v.id("about_section_images"),
     image_url: v.optional(v.string()),
@@ -58,14 +59,14 @@ export const update = mutation({
   },
 });
 
-export const remove = mutation({
+export const remove = adminMutation({
   args: { id: v.id("about_section_images") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
   },
 });
 
-export const reorder = mutation({
+export const reorder = adminMutation({
   args: {
     items: v.array(
       v.object({ id: v.id("about_section_images"), order_index: v.number() })
@@ -78,7 +79,7 @@ export const reorder = mutation({
   },
 });
 
-export const toggleActive = mutation({
+export const toggleActive = adminMutation({
   args: { id: v.id("about_section_images"), is_active: v.boolean() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, { is_active: args.is_active });
