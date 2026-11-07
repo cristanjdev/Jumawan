@@ -1,5 +1,6 @@
 "use client";
 
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle, Github, Linkedin, Twitter, Facebook, Instagram } from "lucide-react";
@@ -247,6 +248,13 @@ export function ContactSection() {
                         </span>
                       )}
                     </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Your details are used only to reply to you. See the{" "}
+                      <Link to="/privacy" className="underline underline-offset-4 hover:text-foreground">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </p>
                     {submitStatus === 'error' && (
                       <p role="alert" className="flex items-center justify-center gap-2 text-destructive text-sm">
                         <AlertCircle className="w-4 h-4" />

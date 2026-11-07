@@ -1,0 +1,15 @@
+{
+  "name": "Cristan Jade Jumawan — Portfolio",
+  "short_name": "CJ Jumawan",
+  "description": "Portfolio of Cristan Jade Jumawan, Full Stack Developer.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    { "src": "/favicon-48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

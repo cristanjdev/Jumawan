@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import * as React from "react";
 import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
+import Privacy from "./pages/Privacy";
 import { initPerformanceMonitoring } from "@/lib/performance";
 import { usePerformanceStore } from "@/stores/usePerformanceStore";
 
@@ -58,6 +59,7 @@ const App = () => {
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Routes>
                 <Route path="/" element={<Portfolio />} />
+                <Route path="/privacy" element={<Privacy />} />
 
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

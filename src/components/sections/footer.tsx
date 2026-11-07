@@ -1,5 +1,6 @@
 "use client";
 
+import { Link } from "react-router-dom";
 import { Github, Linkedin, Mail, Phone } from "lucide-react";
 import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll";
@@ -122,7 +123,13 @@ export function Footer() {
       </div>
 
       <div className="mx-auto max-w-7xl px-6">
-        <div className="mt-10 text-center text-xs text-muted-foreground/70">© {year} Cristan Jade Jumawan. All rights reserved.</div>
+        <div className="mt-10 flex flex-col items-center justify-center gap-2 text-center text-xs text-muted-foreground/70 sm:flex-row sm:gap-3">
+          <span>© {year} Cristan Jade Jumawan. All rights reserved.</span>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
+          <Link to="/privacy" className="underline-offset-4 transition-colors hover:text-cyan-400 hover:underline">
+            Privacy Policy
+          </Link>
+        </div>
       </div>
     </footer>
   );

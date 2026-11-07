@@ -27,163 +27,32 @@
   <link rel="dns-prefetch" href="https://fonts.gstatic.com">
   <link rel="dns-prefetch" href="https://api.fontshare.com">
 
+  <link rel="canonical" href="https://www.cjjumawan.com/" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#020617" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+
+  <!-- Link previews (Facebook, LinkedIn, Messenger, X, …) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cristan Jade Jumawan" />
+  <meta property="og:url" content="https://www.cjjumawan.com/" />
   <meta property="og:title" content="Cristan Jade Jumawan - Portfolio | Full Stack Developer" />
   <meta property="og:description"
     content="Personal portfolio showcasing full stack development projects, skills, and experience in web and mobile application development" />
-  <meta property="og:type" content="website" />
-  <meta property="og:image" content="/photo.png" />
+  <meta property="og:image" content="https://www.cjjumawan.com/photo.png" />
+  <meta property="og:image:alt" content="Cristan Jade Jumawan" />
 
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:site" content="@alex_dev" />
-  <meta name="twitter:image" content="/photo.png" />
-
-  <!-- Block Vercel Analytics script injection and suppress errors -->
-  <script>
-    (function () {
-      // Block webpage_content_reporter.js script from loading
-      const originalAppendChild = Node.prototype.appendChild;
-      const originalInsertBefore = Node.prototype.insertBefore;
-      const originalCreateElement = Document.prototype.createElement;
-
-      // Intercept script creation
-      Document.prototype.createElement = function (tagName, options) {
-        const element = originalCreateElement.call(this, tagName, options);
-
-        if (tagName.toLowerCase() === 'script') {
-          const originalSetAttribute = element.setAttribute;
-          const originalSetAttributeNS = element.setAttributeNS;
-
-          element.setAttribute = function (name, value) {
-            if (name === 'src' && (
-              String(value).includes('webpage_content_reporter') ||
-              String(value).includes('vercel') && String(value).includes('analytics')
-            )) {
-              // Block the script from loading
-              return;
-            }
-            return originalSetAttribute.call(this, name, value);
-          };
-
-          element.setAttributeNS = function (namespace, name, value) {
-            if (name === 'src' && (
-              String(value).includes('webpage_content_reporter') ||
-              String(value).includes('vercel') && String(value).includes('analytics')
-            )) {
-              // Block the script from loading
-              return;
-            }
-            return originalSetAttributeNS.call(this, namespace, name, value);
-          };
-        }
-
-        return element;
-      };
-
-      // Intercept script insertion
-      Node.prototype.appendChild = function (child) {
-        if (child && child.tagName === 'SCRIPT' && child.src && (
-          child.src.includes('webpage_content_reporter') ||
-          (child.src.includes('vercel') && child.src.includes('analytics'))
-        )) {
-          // Block the script
-          return child;
-        }
-        return originalAppendChild.call(this, child);
-      };
-
-      Node.prototype.insertBefore = function (newNode, referenceNode) {
-        if (newNode && newNode.tagName === 'SCRIPT' && newNode.src && (
-          newNode.src.includes('webpage_content_reporter') ||
-          (newNode.src.includes('vercel') && newNode.src.includes('analytics'))
-        )) {
-          // Block the script
-          return newNode;
-        }
-        return originalInsertBefore.call(this, newNode, referenceNode);
-      };
-
-      // Suppress Vercel Analytics webpage_content_reporter.js errors
-      const originalError = window.onerror;
-      window.onerror = function (msg, source, lineno, colno, error) {
-        const sourceStr = String(source || '');
-        const msgStr = String(msg || '');
-
-        // Catch webpage_content_reporter.js errors
-        if (
-          sourceStr.includes('webpage_content_reporter') ||
-          (sourceStr.includes('vercel') && msgStr.includes('Unexpected token')) ||
-          (msgStr.includes('Unexpected token') && msgStr.includes('export') && sourceStr.includes('vercel')) ||
-          (sourceStr.includes('analytics') && msgStr.includes('Unexpected token'))
-        ) {
-          return true; // Suppress error
-        }
-
-        if (originalError) {
-          return originalError.call(this, msg, source, lineno, colno, error);
-        }
-        return false;
-      };
-
-      // Also catch errors via addEventListener (more modern approach)
-      window.addEventListener('error', function (event) {
-        const filename = String(event.filename || '');
-        const message = String(event.message || '');
-
-        if (
-          filename.includes('webpage_content_reporter') ||
-          (filename.includes('vercel') && message.includes('Unexpected token')) ||
-          (message.includes('Unexpected token') && message.includes('export') && filename.includes('vercel')) ||
-          (filename.includes('analytics') && message.includes('Unexpected token'))
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation();
-          return false;
-        }
-      }, true);
-
-      // Remove Vercel Web Analytics / Speed Insights scripts if they slip past createElement hooks.
-      // webpage_content_reporter is ES-module content; loading it as a classic script causes
-      // "Unexpected token 'export'" in the console.
-      try {
-        function scriptSrcBlocked(src) {
-          return src.indexOf('webpage_content_reporter') !== -1 ||
-            (src.indexOf('vercel') !== -1 && (
-              src.indexOf('/insights') !== -1 ||
-              src.indexOf('analytics') !== -1 ||
-              src.indexOf('speed-insights') !== -1
-            ));
-        }
-        function stripBlockedScripts(root) {
-          if (!root || !root.querySelectorAll) return;
-          root.querySelectorAll('script[src]').forEach(function (s) {
-            if (scriptSrcBlocked(String(s.getAttribute('src') || ''))) s.remove();
-          });
-        }
-        stripBlockedScripts(document.documentElement);
-        var mo = new MutationObserver(function (records) {
-          records.forEach(function (rec) {
-            rec.addedNodes.forEach(function (node) {
-              if (node.nodeType !== 1) return;
-              if (node.tagName === 'SCRIPT' && scriptSrcBlocked(String(node.getAttribute('src') || ''))) {
-                node.remove();
-                return;
-              }
-              stripBlockedScripts(node);
-            });
-          });
-        });
-        mo.observe(document.documentElement, { childList: true, subtree: true });
-      } catch (e) { /* ignore */ }
-    })();
-  </script>
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Cristan Jade Jumawan - Portfolio | Full Stack Developer" />
+  <meta name="twitter:description"
+    content="Personal portfolio showcasing full stack development projects, skills, and experience in web and mobile application development" />
+  <meta name="twitter:image" content="https://www.cjjumawan.com/photo.png" />
 </head>
 
 <body>
-  <script>
-    // Prevent flash of wrong theme
-    (function(){var t=localStorage.getItem('portfolio-theme');if(t==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}})();
-  </script>
+  <!-- Prevents a flash of the wrong theme. Allowed by its hash in the Content-Security-Policy (vercel.json):
+       if you change this script, update that hash. -->
+  <script>(function(){try{if(localStorage.getItem('portfolio-theme')==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light');}}catch(e){}})();</script>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

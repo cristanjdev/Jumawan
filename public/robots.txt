@@ -1,2 +1,5 @@
+# Search engines and other crawlers may index the whole site.
 User-agent: *
 Allow: /
+
+Sitemap: https://www.cjjumawan.com/sitemap.xml
