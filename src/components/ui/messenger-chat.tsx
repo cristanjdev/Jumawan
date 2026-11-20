@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Facebook, Mail } from "lucide-react";
+import { Facebook } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -67,12 +67,6 @@ export function MessengerChat() {
   const [messengerUrl, setMessengerUrl] = useState(MESSENGER_URLS.desktop);
   useEffect(() => setMessengerUrl(messengerUrlForDevice()), []);
 
-  const goToContactForm = () => {
-    setOpen(false);
-    // Wait for the modal to close (it locks page scrolling while open)
-    setTimeout(() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" }), 200);
-  };
-
   return (
     <>
       {/* Floating button: above the phone tab bar, bottom-right on larger screens */}
@@ -137,14 +131,6 @@ export function MessengerChat() {
               View my Facebook profile
             </a>
 
-            <button
-              type="button"
-              onClick={goToContactForm}
-              className="mt-5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              <Mail className="h-3.5 w-3.5" />
-              No Facebook? Use the contact form instead
-            </button>
           </div>
         </DialogContent>
       </Dialog>
