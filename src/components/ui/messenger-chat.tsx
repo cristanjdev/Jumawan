@@ -39,12 +39,12 @@ function messengerUrlForDevice() {
 
 const MESSENGER_GRADIENT = "linear-gradient(135deg, #00B2FF 0%, #006AFF 45%, #A033FF 80%, #FF5C87 100%)";
 
-/** The Messenger logo: a speech bubble with a lightning bolt. */
+/** The Messenger logo: a white speech bubble with a blue lightning bolt (fixed colours, so the light theme can't tint it). */
 function MessengerIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
       <path
-        fill="currentColor"
+        fill="#fff"
         d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.44 3.14 7.17.16.14.26.35.27.57l.05 1.78a.8.8 0 0 0 1.12.71l1.98-.87a.8.8 0 0 1 .54-.04c.91.25 1.87.38 2.9.38 5.64 0 10-4.13 10-9.7S17.64 2 12 2Z"
       />
       <path
@@ -75,12 +75,12 @@ export function MessengerChat() {
         onClick={() => setOpen(true)}
         aria-label="Chat with me on Messenger"
         className={cn(
-          "group fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_10px_30px_-8px_rgba(0,106,255,0.65)] transition-transform duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006AFF] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "group fixed right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-[0_8px_22px_-8px_rgba(0,106,255,0.6)] transition-transform duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006AFF] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 md:right-6"
         )}
         style={{ background: MESSENGER_GRADIENT }}
       >
-        <MessengerIcon className="h-7 w-7" />
+        <MessengerIcon className="h-6 w-6" />
         <span className="pointer-events-none absolute right-full mr-3 hidden whitespace-nowrap rounded-lg border border-[var(--modal-btn-border)] bg-[var(--surface-modal)] px-3 py-1.5 text-xs font-medium text-foreground/80 opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 md:block">
           Chat with me
         </span>
