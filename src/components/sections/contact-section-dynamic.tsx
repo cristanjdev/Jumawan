@@ -125,7 +125,7 @@ export function ContactSection() {
     { icon: Github, label: "GitHub", href: "https://github.com/cristanjdev", color: "hover:text-white" },
     { icon: Linkedin, label: "LinkedIn", href: "https://www.linkedin.com/in/cristan-jade-jumawan-45b27b39b", color: "hover:text-blue-400" },
     { icon: Twitter, label: "Twitter", href: "https://twitter.com/cristanjade", color: "hover:text-sky-400" },
-    { icon: Facebook, label: "Facebook", href: "https://facebook.com/yourprofile", color: "hover:text-blue-600" },
+    { icon: Facebook, label: "Facebook", href: "https://www.facebook.com/cristanjade14", color: "hover:text-blue-600" },
     { icon: Instagram, label: "Instagram", href: "https://instagram.com/yourprofile", color: "hover:text-pink-500" },
   ];
 

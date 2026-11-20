@@ -10,6 +10,7 @@ import { ProjectsSection } from "@/components/sections/projects-section";
 import { FeaturedProjectsSection } from "@/components/sections/featured-projects-section";
 import { ContactSection } from "@/components/sections/contact-section-dynamic";
 import { Footer } from "@/components/sections/footer";
+import { MessengerChat } from "@/components/ui/messenger-chat";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 import { useMotionBudget } from "@/stores/usePerformanceStore";
@@ -103,6 +104,8 @@ const Portfolio = () => {
           </div>
         </div>
       </main>
+
+      <MessengerChat />
     </div>
   );
 };
