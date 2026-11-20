@@ -97,14 +97,27 @@ export function MessengerChat() {
           className="w-[calc(100%-2rem)] max-w-sm gap-0 overflow-hidden rounded-2xl border-[var(--modal-btn-border)] bg-[var(--surface-modal)] p-0 sm:rounded-2xl"
         >
           <div className="flex flex-col items-center px-6 pb-6 pt-8 text-center">
-            <span
-              className="flex h-16 w-16 items-center justify-center rounded-full text-white shadow-[0_10px_30px_-10px_rgba(0,106,255,0.8)]"
-              style={{ background: MESSENGER_GRADIENT }}
-            >
-              <MessengerIcon className="h-8 w-8" />
+            {/* My Facebook profile picture (a saved copy: Facebook doesn't let sites load it directly) */}
+            <span className="relative">
+              <span className="block rounded-full p-[3px]" style={{ background: MESSENGER_GRADIENT }}>
+                <img
+                  src="/messenger-avatar.jpg"
+                  alt="Cristan Jade Jumawan"
+                  width={88}
+                  height={88}
+                  className="h-[88px] w-[88px] rounded-full border-[3px] border-[var(--surface-modal)] object-cover"
+                />
+              </span>
+              <span
+                className="absolute bottom-0.5 right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-[var(--surface-modal)]"
+                style={{ background: MESSENGER_GRADIENT }}
+              >
+                <MessengerIcon className="h-3.5 w-3.5" />
+              </span>
             </span>
-            <DialogTitle className="mt-4 text-lg">Let's chat on Messenger</DialogTitle>
-            <DialogDescription className="mt-2 text-sm">
+            <DialogTitle className="mt-4 text-lg">Cristan Jade Jumawan</DialogTitle>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">facebook.com/{FACEBOOK_USERNAME}</p>
+            <DialogDescription className="mt-3 text-sm">
               Have a project or a question? Message me on Messenger. I usually reply within a day.
             </DialogDescription>
 
