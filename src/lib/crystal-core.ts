@@ -126,13 +126,17 @@ const FACE_PATTERN = /* glsl */ `
   void facePattern(out float h, out float r, out float edge){
     vec2 c = vUv - .5;
     r = max(abs(c.x), abs(c.y)) * 2.;
-    float sec = floor((atan(c.y, c.x) + 3.14159265) / .7853982);
+    // atan(0, 0) is undefined: some phone GPUs return NaN at the exact centre of a face, and the bloom
+    // then smeared that one pixel over the whole canvas as a flash
+    float ang = abs(c.x) + abs(c.y) < 1e-3 ? 0. : atan(c.y, c.x);
+    float sec = floor((ang + 3.14159265) / .7853982);
     float band = floor(r * 3.);
     h = hash(sec * 7.13 + band * 13.71 + hash3(vObjN * 7.) * 91.);
     edge = exp(-(1. - r) * 28.);
   }
   // light from the core: face centres glow, the cube's corners stay dark navy
-  float innerLight(){ return pow(smoothstep(2.4, 1.5, length(vPos)), 1.6); }`;
+  // (smoothstep needs its edges in order: reversed ones are undefined in GLSL)
+  float innerLight(){ return pow(1. - smoothstep(1.5, 2.4, length(vPos)), 1.6); }`;
 
 /**
  * Glow that adds light without adding coverage: colour adds, alpha is left alone, so on the

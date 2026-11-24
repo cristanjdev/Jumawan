@@ -100,6 +100,20 @@ const THEMES = {
  * spreads over the whole canvas is dropped: kept, it tints a visible rectangle over the page that
  * brightens and dims as the crystal turns.
  */
+/**
+ * Drops a NaN or infinite pixel and caps very bright ones. A single bad pixel (an undefined maths result
+ * on some phone GPUs) is otherwise spread by the bloom's blur over the whole canvas, which flashes as a
+ * bright cyan or white rectangle for a few frames.
+ */
+// The check reads the bits (all exponent bits set = NaN or infinity): shader compilers assume floats are
+// never NaN and remove isnan() as unnecessary
+const SAFE_TEXEL = /* glsl */ `
+  vec4 safeTexel(vec4 c) {
+    uvec4 exponent = floatBitsToUint(c) & uvec4(0x7f800000u);
+    if (any(equal(exponent, uvec4(0x7f800000u)))) return vec4(0.0);
+    return clamp(c, 0.0, 8.0);
+  }`;
+
 const FinalShader = {
   uniforms: { tDiffuse: { value: null } },
   vertexShader: /* glsl */ `
@@ -107,8 +121,9 @@ const FinalShader = {
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; varying vec2 vUv;
+    ${SAFE_TEXEL}
     void main() {
-      vec4 c = texture2D(tDiffuse, vUv);
+      vec4 c = safeTexel(texture2D(tDiffuse, vUv));
       float coverage = clamp(c.a, 0.0, 1.0);
       gl_FragColor = vec4(c.rgb, 1.0);
       #include <tonemapping_fragment>
@@ -179,6 +194,12 @@ export function createOrbitScene({ host, rings, quality, reduceMotion, dark, get
   bloomBlend.blendDst = OneFactor;
   bloomBlend.blendSrcAlpha = ZeroFactor;
   bloomBlend.blendDstAlpha = OneFactor;
+  // The bloom only picks up clean pixels (see SAFE_TEXEL)
+  const highPass = bloom.materialHighPassFilter;
+  highPass.fragmentShader = highPass.fragmentShader
+    .replace("void main()", `${SAFE_TEXEL}\nvoid main()`)
+    .replace("texture2D( tDiffuse, vUv )", "safeTexel( texture2D( tDiffuse, vUv ) )");
+  highPass.needsUpdate = true;
   composer.addPass(bloom);
   composer.addPass(new ShaderPass(FinalShader));
 
